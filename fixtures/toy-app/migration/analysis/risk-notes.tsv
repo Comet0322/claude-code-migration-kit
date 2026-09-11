@@ -1,0 +1,4 @@
+unit_id	risk_flag	reason
+legacycorp_normalize	normal	單一小函式，無分支
+mathutils	normal	純函式，無分支
+report	high	依賴私有套件替換規則；name 為 None 時的字串顯示行為需要逐字保留，容易被「修正掉」

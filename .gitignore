@@ -1,1 +1,3 @@
 code-migration-kit-with-claude-code/
+.claude/scheduled_tasks.lock
+__pycache__/
