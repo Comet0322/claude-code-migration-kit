@@ -1,6 +1,6 @@
 """CRC-32 / IEEE 802.3 implementation.
 
-Ported from ../../fixtures/lightalloy-delphi7/source-repo/Source/Common/Crypt/CRC32.pas (TCRC32 class) per
+Ported from legacy/CRC32.pas (TCRC32 class) per
 migration/RULEBOOK.md. See RULEBOOK decisions #1-#6 for the naming and
 type-mapping choices made below.
 

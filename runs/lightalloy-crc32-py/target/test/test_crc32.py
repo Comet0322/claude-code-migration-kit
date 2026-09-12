@@ -1,4 +1,4 @@
-"""Tests for CRC32 (ported from ../../fixtures/lightalloy-delphi7/source-repo/Source/Common/Crypt/CRC32.pas TCRC32).
+"""Tests for CRC32 (ported from legacy/CRC32.pas TCRC32).
 
 Ground truth tier: snapshot (see migration/ground-truth-strategy.md).
 All expected values come from

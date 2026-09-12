@@ -1,4 +1,4 @@
-# Rulebook — fixtures/delphi-etl (Delphi → Python)
+# Rulebook — runs/delphi-etl-py (來源: fixtures/delphi-etl) (Delphi → Python)
 
 Domain skill: `domain-delphi-etl-py`。以下規則對轉換 agent 是唯讀的，不可
 在迴圈內修改；有缺口就走 Deviation log，交給人類決定。

@@ -1,10 +1,11 @@
-# Rulebook — fixtures/lightalloy-mediainfo-audio (Delphi 7 → Python 3)
+# Rulebook — runs/lightalloy-mediainfo-audio-py (Delphi 7 → Python 3)
 
 Domain skill: `domain-lightalloy-mediainfo-audio`。這批來源程式碼跟
-`fixtures/lightalloy-delphi7` 是同一個 Light Alloy checkout（`source_path`
-以相對路徑 `../../fixtures/lightalloy-delphi7/source-repo/...` 引用同一份，沒有重新
-clone），但涵蓋完全不同的子系統（22 個音訊格式中繼資料解析器，不是
-CRC-32 工具 class），是獨立的 domain skill、獨立的 migration/ 狀態。以下
+`runs/lightalloy-crc32-py` 是同一個 Light Alloy checkout
+（`fixtures/lightalloy-delphi7/source-repo/`）複製出來的，但涵蓋完全不同
+的子系統（22 個音訊格式中繼資料解析器，不是 CRC-32 工具 class）——各自
+在自己的 `legacy/` 底下留一份獨立複本，不共用、不用相對路徑互相引用，
+是獨立的 domain skill、獨立的 migration/ 狀態。以下
 規則對轉換 agent 是唯讀的，不可在迴圈內修改；有缺口就走 Deviation log，
 交給人類決定。
 

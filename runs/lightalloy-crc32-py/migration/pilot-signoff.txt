@@ -7,7 +7,7 @@ migration-clarify 結尾該有的 STOP。事後審查 migration/RULEBOOK.md、
 migration/ground-truth-strategy.md、migration/behavior-snapshots/CRC32.md、
 domain-lightalloy-delphi7 skill，並自行重新執行測試 + 800 組獨立模糊測試
 （隨機輸入、隨機分塊 update()、隨機 chunk size 的 update_stream()、對
-../../fixtures/lightalloy-delphi7/source-repo/Source/Common/Crypt/CRC32.pas 本身取雜湊）對照 zlib.crc32，全部一致，予以追認核准。
+legacy/CRC32.pas 本身取雜湊）對照 zlib.crc32，全部一致，予以追認核准。
 
 教訓記錄在專案記憶：往後把多階段流程交辦給新 session 時，要在指示裡明確
 保留 clarify→convert 之間的停頓，不要把三個階段寫成一串連續任務。

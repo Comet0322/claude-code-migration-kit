@@ -1,4 +1,4 @@
-# Ground truth strategy — fixtures/lightalloy-mediainfo-audio
+# Ground truth strategy — runs/lightalloy-mediainfo-audio-py
 
 Tier 選定：**混合（11 個 snapshot / 11 個 inference，逐檔決定，見下表）**
 
@@ -8,8 +8,8 @@ Tier 選定：**混合（11 個 snapshot / 11 個 inference，逐檔決定，見
 
 1. **tier: environment** — 不採用。唯讀查詢確認這台機器沒有可用的來源
    語言執行環境：`which dcc32` → not found，`which fpc` → not found。跟
-   `fixtures/lightalloy-delphi7` 是同一台機器、同一個結論，但這次是獨
-   立重新查詢過的，不是沿用另一個 fixture 的結論。
+   `runs/lightalloy-crc32-py` 那次是同一台機器、同一個結論，但這次是獨
+   立重新查詢過的，不是沿用另一個 run 的結論。
 2. **tier: snapshot** — 部分採用。凡是有公開發表、有足夠信心手動核對到
    位元精確的格式規格，用這層：依公開規格文件手動構造已知輸入的 byte
    序列，而不是執行 Delphi 程式碼。

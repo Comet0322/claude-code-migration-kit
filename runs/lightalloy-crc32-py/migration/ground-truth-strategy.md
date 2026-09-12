@@ -1,4 +1,4 @@
-# Ground truth strategy — fixtures/lightalloy-delphi7
+# Ground truth strategy — runs/lightalloy-crc32-py (來源: fixtures/lightalloy-delphi7)
 
 Tier 選定：**snapshot**
 
@@ -14,7 +14,7 @@ Tier 選定：**snapshot**
    CRC-32（IEEE 802.3 / ISO-HDLC，跟 zlib、PNG、Ethernet FCS、PKZIP 用的是
    同一個演算法：poly 0xEDB88320 反射多項式、初始值
    `$FFFFFFFF`、輸出前 XOR `$FFFFFFFF`——這些都直接對得上
-   `../../fixtures/lightalloy-delphi7/source-repo/Source/Common/Crypt/CRC32.pas` 裡的 `CRCHash` 表跟 `Reset`/`Result` 實作）。因此可
+   `legacy/CRC32.pas` 裡的 `CRCHash` 表跟 `Reset`/`Result` 實作）。因此可
    以用 Python 內建、跟來源語言完全無關的外部權威實作 `zlib.crc32` 算出標
    準值，由人工核對演算法一致後存成快照，不需要真的跑起 Delphi。存在
    `migration/behavior-snapshots/CRC32.md`。

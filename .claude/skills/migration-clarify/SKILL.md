@@ -97,11 +97,25 @@ Rulebook 完成後在這個 session 裡就是唯讀的——轉換階段的三�
 
 沒填 Fingerprint 的 domain skill 就跳過這節,不強制。
 
-## 7. 補 target_path、產出完整 manifest
+## 7. 複製來源到本地、補 target_path、產出完整 manifest
 
-讀 `migration/analysis/manifest-draft.tsv`,依 domain skill 模板專案的命名
-慣例,逐列決定 target_path,寫 `migration/manifest.tsv`(欄位:`unit_id,
-source_path, target_path`)。
+讀 `migration/analysis/manifest-draft.tsv`——它的 `source_path` 是
+migration-analyze 掃描時看到的位置，不保證就在這次遷移的執行根目錄底
+下（可能是另一個目錄保管的原始碼庫、甚至是唯讀掛載的來源）。**逐一把
+每個 unit 的來源檔案複製一份進這次遷移自己的 `legacy/` 目錄**（保留
+manifest-draft.tsv 裡的相對路徑結構；來源分散在很多層目錄、彼此關係不
+大的情況，攤平成 `legacy/<檔名>` 也可以，只要整個批次裡不會撞名）。
+
+這樣做的理由：這次遷移的整個工作目錄（`migration/`、`legacy/`、
+`target/`）要能自成一體、可以整包搬走/封存/跟其他次遷移的結果比較，不
+依賴外部那份原始碼庫繼續留在原地、繼續維持同樣的相對路徑——原始碼庫之
+後被更新、搬家、甚至刪除，這次遷移已經做的分析跟決策依然完整可信,不會
+突然找不到檔案或（更危險）不知不覺對到別的版本。
+
+複製完成後，依 domain skill 模板專案的命名慣例逐列決定 target_path，寫
+`migration/manifest.tsv`（欄位：`unit_id, source_path, target_path`，
+`source_path` 一律指向複製後的本地 `legacy/...` 路徑，不再指向
+manifest-draft.tsv 原本寫的位置）。
 
 ## 8. Scaffold 目標專案
 

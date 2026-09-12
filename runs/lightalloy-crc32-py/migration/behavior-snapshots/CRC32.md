@@ -6,7 +6,7 @@
 
 ## 為什麼可以用 zlib.crc32 當權威
 
-`../../fixtures/lightalloy-delphi7/source-repo/Source/Common/Crypt/CRC32.pas` 的 `CRCHash` 查表常數、`Reset`（`Sum:=$FFFFFFFF`）、
+`legacy/CRC32.pas` 的 `CRCHash` 查表常數、`Reset`（`Sum:=$FFFFFFFF`）、
 `Result`（`Sum xor $FFFFFFFF`）三者合起來就是標準 CRC-32 / IEEE 802.3
 （反射多項式 `0xEDB88320`、初始值全 1、輸出前全 1 XOR）——跟 zlib、PNG、
 Ethernet FCS、PKZIP 用的是同一個演算法，非本專案自訂的變體。`CRCHash[1] =

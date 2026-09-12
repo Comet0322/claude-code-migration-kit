@@ -2,7 +2,7 @@
 
 來源：人類依固定寬度欄位規格文件手動推導（不是實測 Delphi 輸出）——見
 `migration/ground-truth-strategy.md` 的 tier 決策。欄位配置定義在
-`../../fixtures/delphi-etl/legacy/FixedWidthParser.pas` 的註解：
+`legacy/FixedWidthParser.pas` 的註解：
 
 ```
 1-10  CustomerId (space-padded)

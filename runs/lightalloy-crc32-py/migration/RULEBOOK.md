@@ -1,4 +1,4 @@
-# Rulebook — fixtures/lightalloy-delphi7 (Delphi 7 → Python 3)
+# Rulebook — runs/lightalloy-crc32-py (來源: fixtures/lightalloy-delphi7) (Delphi 7 → Python 3)
 
 Domain skill: `domain-lightalloy-delphi7`。以下規則對轉換 agent 是唯讀
 的，不可在迴圈內修改；有缺口就走 Deviation log，交給人類決定。

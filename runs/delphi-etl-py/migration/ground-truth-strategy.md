@@ -1,4 +1,4 @@
-# Ground truth strategy — fixtures/delphi-etl
+# Ground truth strategy — runs/delphi-etl-py (來源: fixtures/delphi-etl)
 
 Tier 選定：**snapshot**
 

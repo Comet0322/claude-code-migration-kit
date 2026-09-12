@@ -1,4 +1,4 @@
 unit_id	source_path	cycle_group	order_index
-legacycorp_normalize	../../fixtures/toy-app/legacy/legacycorp_normalize.py		1
-mathutils	../../fixtures/toy-app/legacy/mathutils.py		2
-report	../../fixtures/toy-app/legacy/report.py		3
+legacycorp_normalize	legacy/legacycorp_normalize.py		1
+mathutils	legacy/mathutils.py		2
+report	legacy/report.py		3
