@@ -45,7 +45,15 @@ migration-clarify 會照這個幫每個 unit 決定 target_path，並把骨架�
 `target/src/main.py`，執行 `python3 target/src/main.py --help`，能印出用
 法說明就算成功」。這批應用沒有一個天然的單一進入點（例如是一堆各自獨立
 的 library 函式）就明講「沒有進入點」，migration-convert 那步會跳過「跑
-進入點」，只做「全部測試一起跑」。]
+進入點」，只做「全部測試一起跑」。
+
+如果目標語言需要外部套件（不是純標準庫）：列出套件清單、**人類要先手動
+安裝好**的指令（例如 `npm install`、`pip install -r requirements.txt`），
+跟怎麼**唯讀確認**已經裝好的方式（例如 `test -d node_modules`、
+`pip show <pkg>`）。migration-clarify scaffold 那步、跟 migration-convert
+開跑前都會用這個唯讀確認方式檢查——沒裝好就停下來告訴人類，任何 agent 都
+不會自己執行安裝指令（這條跟「來源語言執行環境」那節是對稱的紀律，只是
+換成目標語言側）。純標準庫、不需要額外套件就明講「無」。]
 
 ## 語法轉換 / library 替換規則
 

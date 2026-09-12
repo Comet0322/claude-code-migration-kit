@@ -49,6 +49,8 @@ fixtures/toy-app/target/
 沒有單一進入點——這批是各自獨立的函式庫（`mathutils`、`report`），不是一
 個有進入點的程式。整合檢查只需要「全部測試一起跑」，不用執行進入點這項。
 
+外部套件：無，只用 Node 內建能力，不需要 `npm install` 任何東西。
+
 ## 語法轉換 / library 替換規則
 
 1. **`legacycorp_normalize.normalize_name` 一律替換**，不建立對應的

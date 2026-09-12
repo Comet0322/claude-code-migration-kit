@@ -28,10 +28,17 @@ pilot**——不管拿到哪個 manifest，跑法完全一樣，差別只在筆�
 
 1. Manifest 檔案存在，且每一列有 `unit_id / source_path / target_path`。
 2. `migration/RULEBOOK.md`、`migration/inventory.tsv`、
-   `migration/domain-skill.txt`（選定的 domain skill 名稱）都存在。
+   `migration/domain-skill.txt`（選定的 domain skill 名稱）、
+   `migration/ground-truth-strategy.md` 都存在。
 3. domain skill 描述的模板專案骨架已經在目標路徑上（你不負責生成骨架）。
-4. `.claude/settings.json` 裡已經有擋 `git commit` / `git push` 等版控異動的
-   deny 規則。**沒有就停下來，告訴人類要加什麼規則，不要自己去編輯
+4. domain skill 如果宣告了目標語言側需要的套件（見 domain skill「模板專
+   案」小節），用唯讀方式確認已經裝好（例如 `test -d node_modules`、
+   `pip show <pkg>`）——**只查詢，不安裝**。沒裝好就停下來告訴人類要先裝
+   什麼，不要自己執行安裝指令（這條跟第 5 項是同一條紅線，只是查的東西
+   不同）。
+5. `.claude/settings.json` 裡已經有擋 `git commit` / `git push` 跟套件安
+   裝指令（`brew install`/`pip install`/`npm install` 等）的 deny 規則。
+   **沒有就停下來，告訴人類要加什麼規則，不要自己去編輯
    settings.json**——這條紅線不可以因為省事而繞過。
 
 任何一項不齊全，回報缺什麼、STOP，不要嘗試自己生成或跳過。
@@ -48,13 +55,26 @@ pilot**——不管拿到哪個 manifest，跑法完全一樣，差別只在筆�
 }
 ```
 
-manifest 裡「已經有 `pass` 狀態檔」的 unit 直接跳過——這是 queue 能重跑、能
-續跑的原因，不用你自己記著跑到哪裡。
+**只處理 `status: pending` 的 unit（狀態檔不存在也視為 `pending`）。**
+`pass`、`fail-conversion`、`fail-test`、`rule-gap` 都是**終止狀態**，跳
+過、不重跑，只計入最終 burndown——這是刻意的：不這樣做的話，每次重新呼
+叫你，永久失敗的 unit 會被重新跑一輪（再花一次三個 agent 的成本），即使
+人類什麼都還沒修。
+
+**人類要重試一個終止狀態的 unit**，做法是明確把它的狀態檔改回
+`status: "pending"`、`attempts` 歸零（代表用修好之後的規則重新給一次完
+整的重試預算），或者乾脆刪掉那個 unit 的狀態檔（等同於 `pending`）。**你
+不會自己判斷「這個看起來修好了，我重試看看」**——沒有人類明確把狀態改回
+`pending`，這個 unit 就一直算失敗，寫在 burndown 裡等人類處理。這條特別
+適用於「規則缺口累積 3 次暫停」之後：人類修完 `RULEBOOK.md`，要記得把
+`rulebook-amendments.md` 裡那個項目標成已解決、並把所有因此暫停的 unit
+狀態改回 `pending`，你才會在下次呼叫時重新處理它們——你不會自己去對照
+「這個修訂解決了哪些 unit」，這是人類要做的事。
 
 ## 每個 unit 的 pipeline
 
 依 manifest 順序（不並行跨 unit，除非呼叫者明確要求平行跑），對每個
-`status` 不是 `pass` 的 unit：
+`status: pending` 的 unit：
 
 1. **呼叫 `migration-test-writer`**，給它 `unit_id`、`source_path`、
    inventory 裡相關列、domain skill 的測試框架慣例。拿到測試檔案路徑 +
@@ -125,6 +145,7 @@ Step 5（run it），但用一次性檢查取代那邊整套錯誤佇列+獨立 
 
 manifest 跑完（或因規則缺口暫停）就停，回報一份 burndown：總數 / pass /
 fail-conversion / fail-test / rule-gap，加上整合檢查的結果（如果有跑的
-話），以及待人類決定的 rulebook 修訂項目列表。**不要自己決定要不要放大
-pilot 到完整批次、要不要進下一個階段**——那是呼叫者看完這份報告後才做的
-事。
+話），以及待人類決定的 rulebook 修訂項目列表。終止狀態的 unit 明確提醒
+一句「要重試請把狀態改回 pending 再重新呼叫我」，不要假設人類記得這件
+事。**不要自己決定要不要放大 pilot 到完整批次、要不要進下一個階段**——
+那是呼叫者看完這份報告後才做的事。

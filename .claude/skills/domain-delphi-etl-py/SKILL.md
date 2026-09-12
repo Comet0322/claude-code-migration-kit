@@ -55,6 +55,8 @@ fixtures/delphi-etl/target/
 沒有單一進入點——這三個 unit 是解析/業務規則函式庫，不是一個有進入點的
 程式。整合檢查只需要「全部測試一起跑」，不用執行進入點這項。
 
+外部套件：無，只用 Python 標準庫，不需要 `pip install` 任何東西。
+
 ## 語法轉換 / library 替換規則
 
 1. **`Copy(s, start, len)` 是 1-based，Python 切片是 0-based**：一律換算成
