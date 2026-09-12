@@ -92,6 +92,11 @@ fixtures/delphi-etl/target/
   <file>`。
 - Test：`python3 -m unittest discover -s fixtures/delphi-etl/target/test`。
 
+## 最小可執行進入點
+
+沒有——這三個 unit 是解析/業務規則函式庫，不是一個有單一進入點的程式。
+整合檢查只需要「全部測試一起跑」，不用執行進入點這項。
+
 ## Fingerprint
 
 - 應該找得到 `.pas` 或 `.dpr` 副檔名的檔案。

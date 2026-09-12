@@ -89,9 +89,42 @@ manifest 裡「已經有 `pass` 狀態檔」的 unit 直接跳過——這是 qu
   rulebook 在迴圈內是唯讀的，修訂交給人類在批次之間合併）。
 - 在最終報告裡明確列出「因規則缺口暫停的 unit 有哪些」。
 
+## 全部 unit 通過後的整合檢查
+
+每次跑完這次拿到的 manifest（不管是 pilot 還是完整批次）之後，檢查
+`migration/manifest.tsv`（**完整清單**，不是你這次跑的那份，可能只是
+pilot 子集）裡是不是每一列都已經是 `pass`。還沒全部 pass 就跳過這節,
+直接進「結束條件」。
+
+全部 pass 才做，而且只做一次（用 `migration/state/_integration.json`
+存不存在判斷有沒有做過；有 unit 的狀態事後被改回非 `pass` 就要重做這
+一節）：
+
+呼叫一次 `migration-test-reviewer`，但這次審查範圍從「一個 unit」換成
+「整個 target/ 專案」：
+
+1. 跑 domain skill 的 build 方法，對 `target/` 底下**全部**檔案一次跑
+   過，不是逐一 unit 分開跑。
+2. 跑 `target/` 底下**全部**測試一次（整個測試目錄一起跑），不是逐一
+   unit 的測試檔案分開跑——這裡要抓的是「單獨看沒問題、合在一起才會爆」
+   的問題（例如兩個 unit 各自的命名衝突、循環 import 在整合時才炸開）。
+3. domain skill 有寫「最小可執行進入點」就執行一次，確認整個組起來的
+   程式真的能跑，不是每個檔案自己過測試就好。沒寫就跳過這一項，不要自
+   己發明一個進入點。
+
+寫入 `migration/state/_integration.json`：`{"status": "pass"|"fail",
+"note": "..."}`。**失敗不自動重試**——問題可能橫跨多個 unit，不像單一
+unit 失敗那樣能明確退回哪個 agent，在最終報告裡列出具體症狀，交給人類
+判斷要退回哪個 unit 重做。
+
+這一節做的事，份量對應原始 code-migration-kit 的 Step 4（compile）+
+Step 5（run it），但用一次性檢查取代那邊整套錯誤佇列+獨立 fixer 的機
+械——這個規模的批次用不到那麼重的機制。
+
 ## 結束條件
 
 manifest 跑完（或因規則缺口暫停）就停，回報一份 burndown：總數 / pass /
-fail-conversion / fail-test / rule-gap，以及待人類決定的 rulebook 修訂項目
-列表。**不要自己決定要不要放大 pilot 到完整批次、要不要進下一個階段**——
-那是呼叫者看完這份報告後才做的事。
+fail-conversion / fail-test / rule-gap，加上整合檢查的結果（如果有跑的
+話），以及待人類決定的 rulebook 修訂項目列表。**不要自己決定要不要放大
+pilot 到完整批次、要不要進下一個階段**——那是呼叫者看完這份報告後才做的
+事。

@@ -77,6 +77,11 @@ fixtures/toy-app/target/
 - Build（語法檢查）：對每個 `target/src/*.js` 執行 `node --check <file>`。
 - Test：`node --test fixtures/toy-app/target/test`。
 
+## 最小可執行進入點
+
+沒有——這批是各自獨立的函式庫（`mathutils`、`report`），不是一個有單一
+進入點的程式。整合檢查只需要「全部測試一起跑」，不用執行進入點這項。
+
 ## Fingerprint
 
 - 應該找得到字樣 `legacycorp_normalize`。

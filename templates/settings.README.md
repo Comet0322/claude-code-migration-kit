@@ -31,9 +31,12 @@ deny 清單能擋掉常見套件管理員的 `install` 指令（`brew`/`apt`/`pi
   `migration-convert` 開跑前會檢查這個檔案存在，沒有就停下來告訴你要加什
   麼，不會自己補。
 - 整個批次（所有 pilot + 完整 manifest）期間都應該保持啟用。
-- 這份 kit 目前的範圍只到「轉換完成、每個 unit 測試通過」，不包含原始 kit
-  裡那種「編譯階段放寬 typecheck deny」的 dissolve 機制——如果之後擴充到
-  build/run 階段，才需要再討論要不要放寬。
+- 這份 kit 的範圍到「轉換完成、每個 unit 測試通過、加一次輕量整合
+  build/run 檢查」為止（`migration-convert` 全部 unit pass 後自動跑一
+  次，見該 skill 的「全部 unit 通過後的整合檢查」小節）。不包含原始 kit
+  裡那種「編譯階段放寬 typecheck deny、錯誤變機器佇列」的重量級 dissolve
+  機制——那是為大規模批次設計的，這裡用不到，如果之後真的要擴充到那個規
+  模，才需要再討論要不要放寬。
 
 ## 為什麼不讓 agent 自己裝
 

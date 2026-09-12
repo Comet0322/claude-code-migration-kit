@@ -53,6 +53,15 @@ migration-clarify 會照這個幫每個 unit 決定 target_path，並把骨架�
 [這批應用怎麼跑測試、怎麼 build——具體指令。給 migration-test-reviewer 用，
 也是轉換 skill guardrail 檢查時要確認存在的東西。]
 
+## 最小可執行進入點（選填）
+
+[全部 unit 轉換完成後，migration-convert 會做一次整合檢查：組完整個
+target 專案跑一次全部測試、並執行這裡指定的進入點一次，確認組起來的整個
+程式真的能跑，不是每個檔案各自過測試就好。寫法例如「執行
+`python3 target/src/main.py --help`，能印出用法說明就算成功」。這批應用
+沒有一個天然的單一進入點（例如是一堆各自獨立的 library 函式）就留白，
+migration-convert 那步會跳過「跑進入點」，只做「全部測試一起跑」。]
+
 ## Fingerprint（選填，給落差比對用）
 
 [列出這個 domain skill 假設成立的具體事實，例如「應該找得到 import

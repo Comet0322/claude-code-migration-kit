@@ -18,9 +18,13 @@ migration-clarify / migration-convert 的工作。每次呼叫完子 skill，照
 
 ## 範圍
 
-這是簡化版，範圍到「轉換完成、每個 unit 的測試都通過」為止。不包含原始
-kit 裡獨立的全域 build/run/行為比對階段——如果人類要那些，是刻意的擴充，
-不要自己假設已經包含在內。
+範圍到「轉換完成、每個 unit 測試通過、加上一次輕量的整合 build/run 檢
+查」為止（整合檢查的細節在 `migration-convert` 裡，全部 unit pass 後自動
+觸發一次，不需要你額外呼叫誰）。**不包含**原始 kit 裡那種獨立的全域
+build 階段（錯誤變機器佇列、切片給不碰編譯器的 fixer、重跑到乾淨）跟
+Step 6 的行為比對（inherited test suite burndown / parity referee）——這
+兩個是為大規模批次設計的重機械，如果人類要，是刻意的擴充，不要自己假設
+已經包含在內。
 
 ## 路由
 
@@ -46,7 +50,13 @@ kit 裡獨立的全域 build/run/行為比對階段——如果人類要那些�
    `migration/manifest.tsv`（完整批次）。pilot 跑過的 unit 因為狀態已經是
    `pass`，這次會自動跳過，不會重做。跑完呈現最終 burndown，STOP。
 
-5. **manifest 全部 `pass`**：回報完成。如果
+5. **manifest 全部 `pass`，但 `migration/state/_integration.json` 不存在
+   或 `status` 不是 `pass`**：再呼叫一次 `migration-convert`（帶完整
+   manifest）——它會發現所有 unit 都過了，觸發那次一次性的整合 build/run
+   檢查。整合檢查失敗不算「完成」，STOP，列出症狀給人類判斷退回哪個
+   unit。
+
+6. **manifest 全部 `pass` 且整合檢查也 `pass`**：回報完成。如果
    `migration/rulebook-amendments.md` 裡還有待處理項目，列出來提醒人
    類——那些是規則缺口的紀錄，不會自己被套用。
 

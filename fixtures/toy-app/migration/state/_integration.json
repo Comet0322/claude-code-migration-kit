@@ -1,0 +1,4 @@
+{
+  "status": "pass",
+  "note": "補記（新增整合檢查步驟之前這批已經跑完）：node --test target/test/*.test.js 14/14 全過；並用獨立跑出的 Python ground truth 交叉比對 node -e 直接呼叫 add/integerAverage/formatReport 的實際輸出，逐字相符。domain skill 未定義最小可執行進入點，未執行該項。"
+}
