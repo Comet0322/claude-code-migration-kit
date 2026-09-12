@@ -1,2 +1,0 @@
-unit_id	risk_flag	reason
-CRC32	normal	單一 class、121 行、無本地依賴（uses Windows, Classes 皆為外部/框架單元，depmap 掃描為 0 邊）、演算法是標準查表法沒有特殊語法；唯一需要留意的是 UpdateWithStream 用到 TStream 這個框架型別，在目標語言沒有直接對應，需要 clarify 階段決定怎麼代表，但這不影響本身複雜度判斷為 high。

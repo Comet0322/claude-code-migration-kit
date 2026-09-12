@@ -1,4 +1,0 @@
-unit_id	source_path	target_path
-atlID3v1	legacy/atlID3v1.pas	target/src/audio/id3v1.py
-atlMPEGaudio	legacy/atlMPEGaudio.pas	target/src/audio/mpegaudio.py
-atlCDAtrack	legacy/atlCDAtrack.pas	target/src/audio/cdatrack.py

@@ -1,5 +1,0 @@
-timestamp	unit_id	agent	attempt	tokens	tool_uses	duration_ms	outcome
-2026-09-12T06:14:39Z	CRC32	test_writer	1	21435	5	49330	completed
-2026-09-12T06:16:17Z	CRC32	converter	1	24790	7	72044	completed
-2026-09-12T06:18:01Z	CRC32	reviewer	1	30238	11	72197	completed
-2026-09-12T06:20:41Z	_integration	reviewer	1	37004	14	101621	completed

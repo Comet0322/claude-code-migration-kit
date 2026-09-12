@@ -1,5 +1,0 @@
-{
-  "status": "pending",
-  "attempts": { "test_writer": 0, "converter": 0, "reviewer": 0 },
-  "last_note": "既有的 target/test/test_fixed_width_parser.py 是在 migration-clarify 補上「取得 ground truth 的方式」這一步之前產出的，test-writer 當時自行執行 brew install fpc 取得真實輸出——流程已修正，不應繼續信任該檔案，需依 migration/behavior-snapshots/FixedWidthParser.md（tier: snapshot）重新產生測試。"
-}

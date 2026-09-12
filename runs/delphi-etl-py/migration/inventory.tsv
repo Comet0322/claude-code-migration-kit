@@ -1,6 +1,0 @@
-unit_id	category	decision_ref	detail
-FixedWidthParser	1-based 索引換算	RULEBOOK#1	Copy(s,start,len) 換成 s[start-1:start-1+len]，每個欄位邊界個別換算
-FixedWidthParser	數字轉換失敗語意	RULEBOOK#3	StrToInt 失敗要拋例外，int() 天生如此，不用額外處理
-CurrencyRules	私有業務資料搬遷	RULEBOOK#2	對照表原樣搬成獨立模組，不內聯、不用通用函式庫取代
-SalesSummary	金額精度	RULEBOOK#4	AmountCents/100.0 對應 amount_cents/100，不換成 Decimal
-SalesSummary	輸出格式 locale 相依性	RULEBOOK#5	FormatFloat 的 locale 依賴行為刻意不保留，固定輸出 "."

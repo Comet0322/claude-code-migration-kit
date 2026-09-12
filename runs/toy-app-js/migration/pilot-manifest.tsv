@@ -1,3 +1,0 @@
-unit_id	source_path	target_path
-mathutils	legacy/mathutils.py	target/src/mathutils.js
-report	legacy/report.py	target/src/report.js

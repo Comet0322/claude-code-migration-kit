@@ -1,5 +1,0 @@
-{
-  "status": "pass",
-  "attempts": { "test_writer": 1, "converter": 1, "reviewer": 1 },
-  "last_note": "5/5 測試通過，build 成功，rulebook 三條規則(#1私有套件內聯/#2除法交給mathutils/#3 None逐字保留)逐條核對無違規，無殘留標記。"
-}

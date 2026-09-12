@@ -1,5 +1,0 @@
-unit_id	category	decision_ref	detail
-mathutils	整數除法語意	RULEBOOK#2	Python // 換成 Math.floor(a/b)，只考慮非負輸入
-report	整數除法語意	RULEBOOK#2	integer_average 呼叫同上規則
-report	nullability / 字串格式化	RULEBOOK#3	name 為 None 時逐字輸出 "None"，不得修正
-report	私有套件呼叫	RULEBOOK#1	legacycorp_normalize 呼叫點內聯取代，不建立對應模組
