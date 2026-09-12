@@ -1,0 +1,4 @@
+unit_id	category	decision_ref	detail
+CRC32	TStream 型別對應	RULEBOOK#6	Delphi TStream 沒有直接對應的 Python 型別；決定用「支援 seek()/read() 的 binary stream 物件」表示，不重建 .Size 屬性，改用讀到 EOF 的迴圈
+CRC32	32-bit 無號整數運算	RULEBOOK#5	Python int 是任意精度，沒有 DWORD 隱含環繞；已證明這個 unit 的運算式數值本來就不會超出 32-bit 範圍，決定不加額外 mask
+CRC32	Buf:Pointer 型別對應	RULEBOOK#4	Delphi 指標+長度參數在 Python 沒有對應概念；決定用 bytes-like（bytes/bytearray/memoryview）取代，逐位元組迭代
