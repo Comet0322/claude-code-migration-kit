@@ -21,6 +21,13 @@ description: >
 `normalize_name(s)`：去頭尾空白、轉小寫、把中間連續空白壓成單一空白。
 **這個模組不可以被逐字翻譯成新語言的對應模組**——見下面替換規則。
 
+## 來源語言執行環境
+
+Python 是直譯語言，一般開發機/CI 環境幾乎都裝有 `python3`，直接執行
+`python3 -c "..."` 或跑腳本即可取得真實行為。可視為預設 tier:
+`environment` 可用；migration-clarify 仍應照流程用 `which python3` 之類
+的唯讀方式確認一次，不要跳過確認直接假設。
+
 ## 模板專案
 
 ```

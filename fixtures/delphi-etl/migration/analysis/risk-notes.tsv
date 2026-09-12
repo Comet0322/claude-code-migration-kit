@@ -1,0 +1,4 @@
+unit_id	risk_flag	reason
+FixedWidthParser	high	1-based Copy 索引換算，每個欄位邊界都要重算，是整個 fixture 最容易翻錯的地方
+CurrencyRules	normal	單純 if/elif 對照表，無索引運算
+SalesSummary	high	組合另外兩個 unit 的輸出；FormatFloat 的 locale 相依行為需要刻意不保留（跟一般「逐字保留舊行為」原則相反的例外）

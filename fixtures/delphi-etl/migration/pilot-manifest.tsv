@@ -1,0 +1,4 @@
+unit_id	source_path	target_path
+FixedWidthParser	legacy/FixedWidthParser.pas	target/src/fixed_width_parser.py
+CurrencyRules	legacy/CurrencyRules.pas	target/src/currency_rules.py
+SalesSummary	legacy/SalesSummary.pas	target/src/sales_summary.py

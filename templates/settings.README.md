@@ -4,7 +4,17 @@
 （`migration-test-writer` / `migration-converter` / `migration-test-reviewer`）
 已經各自用 `tools:` 白名單擋掉了不該有的能力（converter 沒有 Bash、writer
 跟 reviewer 沒有 Write/Edit），這份設定是**再加一層兜底**：不管哪個角色，
-整個 session 都不該在轉換迴圈跑的時候動版控。
+整個 session 都不該在轉換迴圈跑的時候動版控，也不該安裝軟體/套件。
+
+後面這條（禁止安裝軟體）是實測出來的教訓：曾經真實發生 test-writer 找不到
+來源語言的編譯器，自己執行 `brew install fpc` 把編譯器裝到機器上。這份
+deny 清單能擋掉常見套件管理員的 `install` 指令（`brew`/`apt`/`pip`/`npm`/
+`gem`/`go`/`cargo`），但**這只是防止手滑的兜底，不是完整防線**——deny
+清單只能列出「已知」的安裝方式，真正防止繞過的是
+`migration-test-writer.md`/`migration-test-reviewer.md` 裡明講「不能安裝
+軟體、環境不夠用就停下來回報」，以及 `migration-clarify` 在釐清需求跟 Gap
+階段就先問清楚有沒有可用執行環境（見該 skill 的「取得 ground truth 的方
+式」小節），從源頭消除 test-writer 需要自己生出一個環境的動機。
 
 ## 安裝方式
 

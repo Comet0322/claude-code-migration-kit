@@ -38,7 +38,36 @@ skill，實際上人類多半只是確認推薦值，不是重新想一次。
 讀進：私有套件文件、模板專案、語法轉換/library 替換規則、新語言 library 文
 件、測試/build 方法。這些會餵給後面每一節跟轉換階段的三個 subagent。
 
-## 3. 跟人 draft rulebook
+## 3. 取得 ground truth 的方式（三層，人類決定，不是 agent 自己選）
+
+轉換階段的測試撰寫 agent 需要「舊程式碼實際執行的真實行為」當測試斷言依
+據——但這台機器不一定裝得了舊語言的執行環境。**這件事必須在這裡先問清
+楚，不能留到轉換階段才讓測試撰寫 agent 自己發現、自己想辦法解決**：曾經
+真實發生過，test-writer 發現沒有 Delphi 編譯器，自己執行 `brew install
+fpc` 把編譯器裝到機器上——這是不可接受的，裝軟體/改環境是人類的決定，不
+是 agent 可以自己動手處理的範圍。
+
+依序檢查，選出這批（或這個 repo）要用哪一層：
+
+1. **有可用的執行環境**：先看 domain skill 的「來源語言執行環境」小節有
+   沒有寫怎麼呼叫；沒寫，或寫的方法在這台機器上試了失敗，用唯讀方式探測
+   （例如 `which <compiler>`，只查詢、不安裝）確認有沒有現成的。找到就把
+   確切呼叫方式寫進 `migration/ground-truth-strategy.md`，tier 記為
+   `environment`。
+2. **沒有環境：跟人類要 mock data / snapshot**：要這批程式碼的輸入輸出
+   範例、既有測試案例、或 production 資料快照，存進
+   `migration/behavior-snapshots/`，tier 記為 `snapshot`。這是次選，但比
+   环境更貼近多數真實遷移情境——很多 legacy 系統本來就沒辦法在遷移用的
+   sandbox 裡裝起來跑。
+3. **兩者都沒有，最後手段**：明確跟人類確認「這批要接受用讀文件/程式碼推
+   論出來的行為，沒有實測或人工資料驗證」，tier 記為 `inference`，並在
+   `migration/ground-truth-strategy.md` 裡記下人類同意的理由跟日期——這
+   是風險接受的決定，要留痕跡，不能是預設值或事後才承認。
+
+三層擇一寫進 `migration/ground-truth-strategy.md`，測試撰寫 agent 會讀這
+份文件決定怎麼做，不會自己判斷、更不會自己修環境。
+
+## 4. 跟人 draft rulebook
 
 從 domain skill 的「語法轉換/library 替換規則」起手當種子——那些已經是決
 定好的規則，不用重新討論。只跟人討論**這批程式碼特有、domain skill 沒覆蓋
@@ -49,13 +78,13 @@ skill，實際上人類多半只是確認推薦值，不是重新想一次。
 Rulebook 完成後在這個 session 裡就是唯讀的——轉換階段的三個 agent 都不能改
 它，之後要改也是人類在批次之間手動改。
 
-## 4. Gap inventory
+## 5. Gap inventory
 
 依 `migration/analysis/modules.tsv` 掃描，列出目標語言會強迫你明確決定、
 但源語言可以含糊帶過的地方（ownership、nullability、介面契約），寫
 `migration/inventory.tsv`。這是攤開讓 agent 查的表，不是要人一條條讀完。
 
-## 5. Domain skill 假設 vs 實際程式碼比對
+## 6. Domain skill 假設 vs 實際程式碼比對
 
 如果選定的 domain skill 有填 Fingerprint 小節，逐條跟這個 repo 的實際程式
 碼核對：
@@ -68,18 +97,18 @@ Rulebook 完成後在這個 session 裡就是唯讀的——轉換階段的三�
 
 沒填 Fingerprint 的 domain skill 就跳過這節,不強制。
 
-## 6. 補 target_path、產出完整 manifest
+## 7. 補 target_path、產出完整 manifest
 
 讀 `migration/analysis/manifest-draft.tsv`,依 domain skill 模板專案的命名
 慣例,逐列決定 target_path,寫 `migration/manifest.tsv`(欄位:`unit_id,
 source_path, target_path`)。
 
-## 7. Scaffold 目標專案
+## 8. Scaffold 目標專案
 
 依模板專案把目標路徑的骨架建出來(目錄結構、build 設定檔)。已經存在的部分
 不要覆蓋——這個步驟該是幂等的,重跑不該砍掉已經轉換好的東西。
 
-## 8. 產生 pilot 子集
+## 9. 產生 pilot 子集
 
 從 `migration/manifest.tsv` 挑 2-3 個 unit,優先挑 `risk-notes.tsv` 標
 `high` 的,再搭一個典型/普通的,寫 `migration/pilot-manifest.tsv`。這個子集
@@ -88,7 +117,8 @@ source_path, target_path`)。
 
 ## 結束條件
 
-以上八節都做完就**一定要停**,回報完整產物清單(domain skill、rulebook、
-inventory、mismatch 報告如果有、manifest、pilot-manifest、scaffold 狀態)。
+以上九節都做完就**一定要停**,回報完整產物清單(domain skill、
+ground-truth-strategy、rulebook、inventory、mismatch 報告如果有、
+manifest、pilot-manifest、scaffold 狀態)。
 不自動接著呼叫轉換——由人看過這裡的判斷之後,頂層指揮 skill 才會拿
 pilot-manifest 去跑 migration-convert。

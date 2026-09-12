@@ -6,7 +6,20 @@
       "Bash(git add:*)",
       "Bash(git reset:*)",
       "Bash(git rebase:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(brew install:*)",
+      "Bash(brew uninstall:*)",
+      "Bash(apt install:*)",
+      "Bash(apt-get install:*)",
+      "Bash(apt-get remove:*)",
+      "Bash(yum install:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(npm install:*)",
+      "Bash(npm i:*)",
+      "Bash(gem install:*)",
+      "Bash(go install:*)",
+      "Bash(cargo install:*)"
     ]
   }
 }

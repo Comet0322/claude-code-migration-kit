@@ -1,0 +1,4 @@
+unit_id	source_path	cycle_group	order_index
+FixedWidthParser	legacy/FixedWidthParser.pas		1
+CurrencyRules	legacy/CurrencyRules.pas		2
+SalesSummary	legacy/SalesSummary.pas		3
