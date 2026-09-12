@@ -1,0 +1,4 @@
+unit_id	source_path	target_path
+atlID3v1	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlID3v1.pas	target/src/audio/id3v1.py
+atlMPEGaudio	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlMPEGaudio.pas	target/src/audio/mpegaudio.py
+atlCDAtrack	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlCDAtrack.pas	target/src/audio/cdatrack.py

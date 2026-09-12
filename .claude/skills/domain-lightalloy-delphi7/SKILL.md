@@ -45,7 +45,7 @@ Delphi 執行環境，也不必退到 `inference` tier**——見
 ## 模板專案
 
 ```
-fixtures/lightalloy-delphi7/target/
+target/
   src/
     crc32.py
   test/
@@ -124,10 +124,11 @@ fixtures/lightalloy-delphi7/target/
 
 ## 測試 / build 方法
 
-- Build（語法檢查）：`python3 -m py_compile
-  fixtures/lightalloy-delphi7/target/src/crc32.py`
-- Test：`python3 -m unittest discover -s
-  fixtures/lightalloy-delphi7/target/test`
+（以下路徑相對於這次遷移的執行根目錄 `runs/<這次遷移的名稱>/`，不是這個
+domain skill 描述的來源 `fixtures/lightalloy-delphi7/`）
+
+- Build（語法檢查）：`python3 -m py_compile target/src/crc32.py`
+- Test：`python3 -m unittest discover -s target/test`
 
 ## Fingerprint
 

@@ -1,0 +1,23 @@
+unit_id	source_path	cycle_group	order_index
+atlID3v2	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlID3v2.pas		1
+atlFLACfile	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlFLACfile.pas		2
+atlAPEtag	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlAPEtag.pas		3
+atlID3v1	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlID3v1.pas		4
+atlMPEGplus	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlMPEGplus.pas		5
+atlVorbisComment	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlVorbisComment.pas		6
+atlWAVfile	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlWAVfile.pas		7
+atlMonkey	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlMonkey.pas		8
+atlMPEGaudio	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlMPEGaudio.pas		9
+atlWMAfile	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlWMAfile.pas		10
+atlCDAtrack	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlCDAtrack.pas		11
+atlSpeex	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlSpeex.pas		12
+atlDTS	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlDTS.pas		13
+atlWAVPackfile	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlWAVPackfile.pas		14
+atlMusepack	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlMusepack.pas		15
+atlAACfile	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlAACfile.pas		16
+atlFPLfile	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlFPLfile.pas		17
+atlAC3	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlAC3.pas		18
+atlOggVorbis	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlOggVorbis.pas		19
+atlTTA	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlTTA.pas		20
+atlOptimFROG	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlOptimFROG.pas		21
+atlTwinVQ	../../fixtures/lightalloy-delphi7/source-repo/Source/Engine/MediaInfo/Audio/atlTwinVQ.pas		22

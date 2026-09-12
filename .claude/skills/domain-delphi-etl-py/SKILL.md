@@ -38,7 +38,7 @@ mock data/snapshot，不要讓任何 agent 自己安裝編譯器。
 ## 模板專案
 
 ```
-fixtures/delphi-etl/target/
+target/
   src/
     fixed_width_parser.py
     currency_rules.py
@@ -95,7 +95,9 @@ fixtures/delphi-etl/target/
 
 - Build（語法檢查）：對每個 `target/src/*.py` 執行 `python3 -m py_compile
   <file>`。
-- Test：`python3 -m unittest discover -s fixtures/delphi-etl/target/test`。
+- Test：`python3 -m unittest discover -s target/test`（相對於這次遷移的執
+  行根目錄 `runs/<這次遷移的名稱>/`，不是這個 domain skill 描述的來源
+  `fixtures/delphi-etl/`）。
 
 ## Fingerprint
 

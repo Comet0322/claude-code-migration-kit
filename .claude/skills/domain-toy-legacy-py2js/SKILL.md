@@ -31,7 +31,7 @@ Python 是直譯語言，一般開發機/CI 環境幾乎都裝有 `python3`，�
 ## 模板專案
 
 ```
-fixtures/toy-app/target/
+target/
   src/
     mathutils.js
     report.js
@@ -80,7 +80,9 @@ fixtures/toy-app/target/
 ## 測試 / build 方法
 
 - Build（語法檢查）：對每個 `target/src/*.js` 執行 `node --check <file>`。
-- Test：`node --test fixtures/toy-app/target/test`。
+- Test：`node --test target/test`（相對於這次遷移的執行根目錄，也就是
+  `runs/<這次遷移的名稱>/`，不是這個 domain skill 描述的來源
+  `fixtures/toy-app/`）。
 
 ## Fingerprint
 

@@ -1,0 +1,4 @@
+unit_id	source_path	target_path
+FixedWidthParser	../../fixtures/delphi-etl/legacy/FixedWidthParser.pas	target/src/fixed_width_parser.py
+CurrencyRules	../../fixtures/delphi-etl/legacy/CurrencyRules.pas	target/src/currency_rules.py
+SalesSummary	../../fixtures/delphi-etl/legacy/SalesSummary.pas	target/src/sales_summary.py

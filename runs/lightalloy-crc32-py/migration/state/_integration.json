@@ -1,0 +1,4 @@
+{
+  "status": "pass",
+  "note": "manifest 全部 unit（僅 CRC32 一個）已 pass。整合檢查：對 target/src 全部檔案跑 py_compile 成功；對 target/test 全部測試一起跑 11/11 pass。domain skill 明講「沒有單一進入點」，跳過進入點執行這項。額外做了超出 pipeline 規範的獨立驗證：直接執行 target/src/crc32.py，用 11 組快照之外的全新輸入（多種長度隨機資料、逐位元組多次 update()、跨 chunk 邊界的 update_stream()、../../fixtures/lightalloy-delphi7/source-repo/Source/Common/Crypt/CRC32.pas 檔案本身內容）跟 Python 內建 zlib.crc32 比對，全部一致。"
+}

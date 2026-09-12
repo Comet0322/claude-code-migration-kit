@@ -1,0 +1,9 @@
+unit_id	category	decision_ref	detail
+atlMPEGplus,atlMusepack	Class 命名衝突	RULEBOOK#5	兩個獨立 unit 都宣告同名 TMPEGplus class；決定依檔案而非原始類別名稱命名，分別對應 MPEGPlus/Musepack 兩個獨立 Python class，不合併
+atlAPEtag,atlFPLfile	GUI 依賴（死碼）	RULEBOOK#6	兩處 uses Dialogs 相關呼叫皆為整行註解掉的死碼（ShowMessage debug 呼叫），已逐行核對無其他 Dialogs 相關 API 出現、無流程依賴對話框回傳值；決定直接捨棄，不建立任何等價物
+atlAPEtag,atlID3v2,atlMPEGaudio,atlMPEGplus,atlMusepack,atlTwinVQ,atlWAVfile,atlWAVPackfile,atlWMAfile	Record 欄位佈局驗證（非 packed record）	RULEBOOK#2	多個 record 型別宣告成非 packed，但透過固定長度 BlockRead/Stream.Read 讀入；決定轉換前必須逐一驗算欄位大小總和是否等於實際讀取 byte 數，對不上就走 deviation，不可自行猜測 padding
+atlID3v1,atlFLACfile	同名但獨立的全域變數	RULEBOOK#9	atlID3v1.pas 與 atlFLACfile.pas 各自獨立宣告同名的 bTAG_PreserveDate（atlFLACfile.pas 未 uses atlID3v1）；決定各自對應到所屬目標模組自己的 module-level 變數，不視為共用狀態
+atlFPLfile	疑似對主表單的殘留依賴	RULEBOOK#10	L143 有一行被註解掉的 //uses Main;，已核對確認是死碼殘留，目前不依賴應用程式主表單；決定 Python 版本不重建任何 Main 表單相關功能
+atlCDAtrack	INI 檔案解析對應	RULEBOOK#11	TIniFile 讀 cdplayer.ini 對應到 Python configparser；section/key 大小寫語意可能與 Windows INI 不完全一致，決定轉換時要對照實際大小寫明確處理，不假設自動對齊
+atlID3v1,atlAPEtag,atlID3v2,atlOggVorbis,atlSpeex	全域可變狀態（module-level 變數）	RULEBOOK#9	atlID3v1 的 5 個全域變數（含 148 個 genre 字串）、atlFPLfile 的 FPLItems 等 interface-scope 全域狀態；決定對應到 Python module-level 變數並保留原始初始值，測試案例之間需要留意這些狀態不會自動重置（每個測試檔案是獨立 process，但同一個測試檔案內多個 test case 之間共用同一份 import）
+atlOggVorbis,atlSpeex	32-bit/16-bit 環繞行為	RULEBOOK#12	自訂 CRC 變體（非標準 CRC32）的環繞行為可能是演算法正確性的一部分；決定逐一運算式判斷是否需要顯式 mask，不假設「反正是無號整數運算就不需要」

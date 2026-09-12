@@ -1,0 +1,3 @@
+unit_id	source_path	target_path
+mathutils	../../fixtures/toy-app/legacy/mathutils.py	target/src/mathutils.js
+report	../../fixtures/toy-app/legacy/report.py	target/src/report.js

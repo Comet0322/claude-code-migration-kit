@@ -1,0 +1,4 @@
+unit_id	source_path	cycle_group	order_index
+FixedWidthParser	../../fixtures/delphi-etl/legacy/FixedWidthParser.pas		1
+CurrencyRules	../../fixtures/delphi-etl/legacy/CurrencyRules.pas		2
+SalesSummary	../../fixtures/delphi-etl/legacy/SalesSummary.pas		3
