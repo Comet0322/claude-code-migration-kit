@@ -52,6 +52,9 @@ fixtures/delphi-etl/target/
 用 Python 標準庫的 `unittest`，不裝任何 pip 套件。模組系統就是一般 Python
 `import`（無特殊限制）。
 
+沒有單一進入點——這三個 unit 是解析/業務規則函式庫，不是一個有進入點的
+程式。整合檢查只需要「全部測試一起跑」，不用執行進入點這項。
+
 ## 語法轉換 / library 替換規則
 
 1. **`Copy(s, start, len)` 是 1-based，Python 切片是 0-based**：一律換算成
@@ -91,11 +94,6 @@ fixtures/delphi-etl/target/
 - Build（語法檢查）：對每個 `target/src/*.py` 執行 `python3 -m py_compile
   <file>`。
 - Test：`python3 -m unittest discover -s fixtures/delphi-etl/target/test`。
-
-## 最小可執行進入點
-
-沒有——這三個 unit 是解析/業務規則函式庫，不是一個有單一進入點的程式。
-整合檢查只需要「全部測試一起跑」，不用執行進入點這項。
 
 ## Fingerprint
 

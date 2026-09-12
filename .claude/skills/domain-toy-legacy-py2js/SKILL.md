@@ -46,6 +46,9 @@ fixtures/toy-app/target/
 上的：第一輪測試撰寫 agent 各自獨立猜到同一個答案，但這是運氣，不是保證，
 明確寫下來避免下次不同 agent 猜出不同答案導致互相 import 失敗。
 
+沒有單一進入點——這批是各自獨立的函式庫（`mathutils`、`report`），不是一
+個有進入點的程式。整合檢查只需要「全部測試一起跑」，不用執行進入點這項。
+
 ## 語法轉換 / library 替換規則
 
 1. **`legacycorp_normalize.normalize_name` 一律替換**，不建立對應的
@@ -76,11 +79,6 @@ fixtures/toy-app/target/
 
 - Build（語法檢查）：對每個 `target/src/*.js` 執行 `node --check <file>`。
 - Test：`node --test fixtures/toy-app/target/test`。
-
-## 最小可執行進入點
-
-沒有——這批是各自獨立的函式庫（`mathutils`、`report`），不是一個有單一
-進入點的程式。整合檢查只需要「全部測試一起跑」，不用執行進入點這項。
 
 ## Fingerprint
 
