@@ -85,9 +85,17 @@ pilot**——不管拿到哪個 manifest，跑法完全一樣，差別只在筆�
 3. **呼叫 `migration-test-reviewer`**，給它 `source_path`、`target_path`、
    測試檔案路徑 + 行為觀察筆記、rulebook、domain skill 的 build/test 方法。
    拿到結構化審查報告。
+
+**每次呼叫上面任何一個 agent，不管結果是通過還是要重跑，都要把它回傳的
+usage 統計附加一行到 `migration/cost-log.tsv`**（欄位：`timestamp,
+unit_id, agent, attempt, tokens, tool_uses, duration_ms, outcome`）。這不
+是只在成功時才記——重跑的呼叫一樣花資源，budget 要算進去，不然「這次
+pilot 實際花了多少」會低估。這份紀錄是給人類做容量規劃用的（air-gapped、
+固定內部算力的環境沒有「加錢買更多算力」這個選項，pilot 要不要放大到完整
+批次，靠的是這份數字，不是感覺）。
+
 4. 依審查結論分派：
-   - **通過** → 狀態寫 `pass`，附加一行到 `migration/cost-log.tsv`，繼續下
-     一個 unit。
+   - **通過** → 狀態寫 `pass`，繼續下一個 unit。
    - **不通過，責任歸轉換** → `attempts.converter += 1`；未達重試上限（預設
      2 次）就帶著審查報告重跑第 2 步；達上限則狀態寫 `fail-conversion`，
      跳過這個 unit，記錄下來，繼續下一個（不要卡住整條 queue）。
@@ -132,6 +140,9 @@ pilot 子集）裡是不是每一列都已經是 `pass`。還沒全部 pass 就�
    確認整個組起來的程式真的能跑，不是每個檔案自己過測試就好。沒描述
    （或明講沒有進入點）就跳過這一項，不要自己發明一個進入點。
 
+這次呼叫的 usage 統計一樣附加一行到 `migration/cost-log.tsv`
+（`unit_id` 欄位寫 `_integration`）。
+
 寫入 `migration/state/_integration.json`：`{"status": "pass"|"fail",
 "note": "..."}`。**失敗不自動重試**——問題可能橫跨多個 unit，不像單一
 unit 失敗那樣能明確退回哪個 agent，在最終報告裡列出具體症狀，交給人類
@@ -145,7 +156,10 @@ Step 5（run it），但用一次性檢查取代那邊整套錯誤佇列+獨立 
 
 manifest 跑完（或因規則缺口暫停）就停，回報一份 burndown：總數 / pass /
 fail-conversion / fail-test / rule-gap，加上整合檢查的結果（如果有跑的
-話），以及待人類決定的 rulebook 修訂項目列表。終止狀態的 unit 明確提醒
-一句「要重試請把狀態改回 pending 再重新呼叫我」，不要假設人類記得這件
-事。**不要自己決定要不要放大 pilot 到完整批次、要不要進下一個階段**——
-那是呼叫者看完這份報告後才做的事。
+話），以及待人類決定的 rulebook 修訂項目列表。連同這次跑下來
+`migration/cost-log.tsv` 的總計（總 token 數、總耗時、依 agent 角色分開
+的小計）一起附在報告裡——這是人類決定「pilot 這樣的花費，放大到完整批
+次大概要多少」的依據。終止狀態的 unit 明確提醒一句「要重試請把狀態改回
+pending 再重新呼叫我」，不要假設人類記得這件事。**不要自己決定要不要放
+大 pilot 到完整批次、要不要進下一個階段**——那是呼叫者看完這份報告後才
+做的事。
