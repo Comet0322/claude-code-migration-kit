@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--history-path", default="harness/history.tsv")
     parser.add_argument("--max-turns", type=int, default=20)
     parser.add_argument("--max-wallclock-seconds", type=int, default=3600)
+    parser.add_argument("--per-call-timeout-seconds", type=int, default=1800)
     args = parser.parse_args(argv)
 
     fixtures_root = Path(args.fixtures_root)
@@ -38,7 +39,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         provision_convert_only(args.fixture, run_dir, fixtures_root, templates_root)
 
-    config = DriverConfig(max_turns=args.max_turns, max_wallclock_seconds=args.max_wallclock_seconds)
+    config = DriverConfig(
+        max_turns=args.max_turns,
+        max_wallclock_seconds=args.max_wallclock_seconds,
+        per_call_timeout_seconds=args.per_call_timeout_seconds,
+    )
     result = run_loop(run_dir, args.mode, config)
 
     state = read_run_state(run_dir)

@@ -14,7 +14,7 @@ class DriverConfig:
     max_turns: int = 20
     max_wallclock_seconds: int = 3600
     claude_bin: str = "claude"
-    per_call_timeout_seconds: int = 900
+    per_call_timeout_seconds: int = 1800
     allowed_tools: str = "Bash,Edit,Write,Read,Glob,Grep,Skill,Task"
 
 
@@ -24,6 +24,10 @@ class DriverResult:
     turns_used: int
     last_reason: str
     last_stdout: str
+
+
+class DriverTimeoutError(Exception):
+    """單次 claude -p 呼叫超過 per_call_timeout_seconds。"""
 
 
 _E2E_PROMPT = "用 migration skill 處理這次遷移。"
@@ -42,13 +46,18 @@ def invoke_claude(run_dir, prompt: str, config: DriverConfig) -> str:
         "--allowedTools",
         config.allowed_tools,
     ]
-    result = subprocess.run(
-        cmd,
-        cwd=run_dir,
-        capture_output=True,
-        text=True,
-        timeout=config.per_call_timeout_seconds,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=run_dir,
+            capture_output=True,
+            text=True,
+            timeout=config.per_call_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DriverTimeoutError(
+            f"claude -p 逾時（超過 per_call_timeout_seconds={config.per_call_timeout_seconds} 秒）"
+        ) from exc
     try:
         data = json.loads(result.stdout)
     except json.JSONDecodeError:
@@ -68,7 +77,11 @@ def run_loop(run_dir, mode: str, config: DriverConfig = DriverConfig()) -> Drive
         if time.monotonic() - start >= config.max_wallclock_seconds:
             return DriverResult(Outcome.ERROR, turns, "超過 max_wallclock_seconds", last_stdout)
 
-        last_stdout = invoke_claude(run_dir, prompt, config)
+        try:
+            last_stdout = invoke_claude(run_dir, prompt, config)
+        except DriverTimeoutError as exc:
+            turns += 1
+            return DriverResult(Outcome.ERROR, turns, str(exc), last_stdout)
         turns += 1
 
         state = read_run_state(run_dir)

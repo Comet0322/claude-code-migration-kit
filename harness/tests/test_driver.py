@@ -104,3 +104,28 @@ def test_run_loop_stops_at_max_turns(monkeypatch, tmp_path: Path):
     assert result.outcome == Outcome.ERROR
     assert "max_turns" in result.last_reason
     assert result.turns_used == 3
+
+
+def test_run_loop_returns_error_on_timeout_instead_of_crashing(monkeypatch, tmp_path: Path):
+    # regression test (found via real end-to-end validation in Task 9): a
+    # single claude -p call that legitimately takes longer than
+    # per_call_timeout_seconds (e.g. migration-convert dispatching three
+    # subagents per unit) must produce a graceful Outcome.ERROR, not an
+    # uncaught subprocess.TimeoutExpired that crashes the whole harness
+    # process.
+    from harness.driver import DriverTimeoutError
+
+    (tmp_path / "migration").mkdir()
+
+    def fake_invoke_that_times_out(run_dir, prompt, config):
+        raise DriverTimeoutError("claude -p 逾時（超過 per_call_timeout_seconds=1800 秒）")
+
+    monkeypatch.setattr("harness.driver.invoke_claude", fake_invoke_that_times_out)
+    monkeypatch.setattr("harness.driver.evaluate_gate", lambda state: GateDecision(Outcome.CONTINUE, "unused"))
+    monkeypatch.setattr("harness.driver.read_run_state", lambda run_dir: object())
+
+    result = run_loop(tmp_path, "e2e", DriverConfig(max_turns=5, max_wallclock_seconds=60))
+
+    assert result.outcome == Outcome.ERROR
+    assert "逾時" in result.last_reason
+    assert result.turns_used == 1
