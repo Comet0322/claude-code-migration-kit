@@ -38,8 +38,8 @@ def evaluate_gate(state: RunState) -> GateDecision:
             "有 unit 卡在失敗狀態且 rulebook-amendments.md 有待處理項目",
         )
 
-    if state.pilot_manifest_exists and not state.pilot_signoff_exists:
-        pilot_unit_ids = _pilot_unit_ids(state)
+    if state.pilot_unit_ids and not state.pilot_signoff_exists:
+        pilot_unit_ids = state.pilot_unit_ids
         pilot_units = [state.unit_states.get(u) for u in pilot_unit_ids]
         any_failed = any(
             u is not None and u.status in _FAILURE_STATUSES for u in pilot_units
@@ -81,16 +81,3 @@ def evaluate_gate(state: RunState) -> GateDecision:
                 return GateDecision(Outcome.NEEDS_HUMAN, "整合檢查失敗，需要人類判斷退回哪個 unit")
 
     return GateDecision(Outcome.CONTINUE, "尚未到終止條件，繼續下一輪")
-
-
-def _pilot_unit_ids(state: RunState) -> list[str]:
-    # pilot-manifest.tsv 有標題列（unit_id/source_path/target_path），跟
-    # manifest.tsv 同格式（Task 9 端到端驗收發現，見 state.py 的同類修
-    # 正）——第一行永遠跳過，不當成一個 unit id。
-    pilot_path = state.run_dir / "migration" / "pilot-manifest.tsv"
-    if not pilot_path.exists():
-        return []
-    lines = [line for line in pilot_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    if lines:
-        lines = lines[1:]
-    return [line.split("\t", 1)[0] for line in lines]

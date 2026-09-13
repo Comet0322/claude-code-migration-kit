@@ -28,6 +28,13 @@ description: >
 兩個 domain skill 引用這裡當作「模板專案 / 新語言 library 文件 / 測試
 build 方法」三節的內容，不重複維護。
 
+`vendor/corplib-java/` 這個子資料夾放的是 `corplib-java` 的一份真實、可
+編譯、可執行的最小實作（後端是 SQLite，不是下面文件描述的正牌 MS SQL
+Server，僅供 harness 測試基礎設施驗證整條 pipeline 真的能 compile、能
+執行、測試真的能過/不過用，不是公司內部正式套件、也不是這份文件描述行
+為的替代品）——跟這份 SKILL.md 放在同一個 skill 資料夾底下維護，不是獨
+立的東西。
+
 ## 專案形狀：背景 ETL 批次
 
 ```

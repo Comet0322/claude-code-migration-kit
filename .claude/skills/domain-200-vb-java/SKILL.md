@@ -58,10 +58,6 @@ Logger.LogError "db timeout", "unit_id=u123"
 概率這台機器裝不起來（VB6 已停產），優先假設要走 snapshot 或 inference
 層級。
 
-## 模板專案
-
-同 skill `java-template`。
-
 ## 語法轉換 / library 替換規則
 
 | VB6（`Dept200Common`） | Java（`java-template`） | 備註 |
@@ -70,6 +66,10 @@ Logger.LogError "db timeout", "unit_id=u123"
 | `Conn.BeginTrans` / `CommitTrans` / `RollbackTrans` | `try (var tx = db.transaction()) { ...; tx.commit(); }` | 只有原始碼裡看得到手動呼叫 `BeginTrans` 的路徑才對應 `transaction()`；沒有交易包起來的單純 `Query`/`Execute` 對應 `db.session()`。 |
 | `Logger.LogInfo msg, "k=v;k2=v2"` | `logger.info(msg, Map.of("k", "v", "k2", "v2"))` | 先用 `;` 拆多組，再用 `=` 拆單組 key/value。 |
 | `Logger.LogError msg, kv`（`On Error GoTo` 區塊內） | `logger.error(msg, Map.of(...), ex)` | `Err.Description` 的內容包成 `new RuntimeException(errDescription)` 當 `ex` 傳入；不在 `On Error` 區塊內的 `LogError` 呼叫，`ex` 傳 `null`，不要編一個假的例外物件。 |
+
+## 模板專案
+
+同 skill `java-template`。
 
 ## 新語言 library 文件
 

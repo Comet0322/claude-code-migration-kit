@@ -35,11 +35,42 @@ def test_provision_e2e_copies_legacy_seeds_settings_and_writes_marker(tmp_path: 
     run_dir = tmp_path / "runs" / "run1"
     run_dir.mkdir(parents=True)
 
-    provision_e2e("dept200-vb6", run_dir, fixtures_root, templates_root)
+    provision_e2e("dept200-vb6", run_dir, fixtures_root, tmp_path, templates_root)
 
     assert (run_dir / "legacy" / "UserSync.bas").exists()
     assert (run_dir / ".claude" / "settings.json").exists()
     assert (run_dir / "migration" / ".headless-test").exists()
+
+
+def test_provision_e2e_writes_force_domain_skill_marker_when_given(tmp_path: Path):
+    fixtures_root = tmp_path / "fixtures"
+    templates_root = tmp_path / "templates"
+    _make_fixture(fixtures_root, "dept200-delphi")
+    _make_templates(templates_root)
+    run_dir = tmp_path / "runs" / "run1"
+    run_dir.mkdir(parents=True)
+
+    provision_e2e(
+        "dept200-delphi", run_dir, fixtures_root, tmp_path, templates_root,
+        force_domain_skill="domain-200-delphi-java",
+    )
+
+    marker = run_dir / "migration" / ".headless-test-domain-skill"
+    assert marker.exists()
+    assert marker.read_text(encoding="utf-8").strip() == "domain-200-delphi-java"
+
+
+def test_provision_e2e_omits_force_domain_skill_marker_by_default(tmp_path: Path):
+    fixtures_root = tmp_path / "fixtures"
+    templates_root = tmp_path / "templates"
+    _make_fixture(fixtures_root, "dept200-vb6")
+    _make_templates(templates_root)
+    run_dir = tmp_path / "runs" / "run1"
+    run_dir.mkdir(parents=True)
+
+    provision_e2e("dept200-vb6", run_dir, fixtures_root, tmp_path, templates_root)
+
+    assert not (run_dir / "migration" / ".headless-test-domain-skill").exists()
 
 
 def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Path):
@@ -54,7 +85,7 @@ def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Pat
     run_dir = tmp_path / "runs" / "run2"
     run_dir.mkdir(parents=True)
 
-    provision_convert_only("dept200-vb6", run_dir, fixtures_root, templates_root)
+    provision_convert_only("dept200-vb6", run_dir, fixtures_root, tmp_path, templates_root)
 
     assert (run_dir / "migration" / "manifest.tsv").exists()
     assert (run_dir / "migration" / "RULEBOOK.md").exists()
@@ -64,8 +95,9 @@ def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Pat
 def test_provision_e2e_sandboxes_run_dir_and_keeps_existing_deny_rules(tmp_path: Path):
     # regression test: Task 9 端到端驗收發現 agent 會用 Bash 的 cd 逃出
     # run_dir，讀到 repo 根目錄殘留的其他遷移產物當「先例」污染決策。修法
-    # 是預設整個 repo 都讀不到、寫不到，只白名單 .claude/、vendor/（domain
-    # skill 跟目標端 library 文件）跟這次 run 自己的工作目錄。
+    # 是預設整個 repo 都讀不到、寫不到，只白名單 .claude/（domain skill 跟
+    # 目標端 library 文件，包含各 template skill 自己 vendor/ 底下的真實
+    # 可執行實作）跟這次 run 自己的工作目錄。
     fixtures_root = tmp_path / "fixtures"
     templates_root = tmp_path / "templates"
     _make_fixture(fixtures_root, "dept200-vb6")
@@ -77,7 +109,7 @@ def test_provision_e2e_sandboxes_run_dir_and_keeps_existing_deny_rules(tmp_path:
     run_dir = tmp_path / "runs" / "run1"
     run_dir.mkdir(parents=True)
 
-    provision_e2e("dept200-vb6", run_dir, fixtures_root, templates_root)
+    provision_e2e("dept200-vb6", run_dir, fixtures_root, repo_root, templates_root)
 
     settings = json.loads((run_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
 
@@ -90,7 +122,6 @@ def test_provision_e2e_sandboxes_run_dir_and_keeps_existing_deny_rules(tmp_path:
     allow_read = settings["sandbox"]["filesystem"]["allowRead"]
     assert f"//{repo_root_abs}/**" in deny_read
     assert f"//{repo_root_abs}/.claude/**" in allow_read
-    assert f"//{repo_root_abs}/vendor/**" in allow_read
     assert f"//{run_dir_abs}/**" in allow_read
 
     # permissions.deny/allow 的語意跟 sandbox filesystem 不同——deny 永遠
@@ -102,7 +133,8 @@ def test_provision_e2e_sandboxes_run_dir_and_keeps_existing_deny_rules(tmp_path:
     assert f"Edit(//{repo_root_abs}/migration/**)" in permissions["deny"]
     assert f"Read(//{repo_root_abs}/harness/**)" in permissions["deny"]
     assert f"Read(//{repo_root_abs}/fixtures/**)" in permissions["deny"]
-    # 既有的 git commit/push、套件安裝 deny 規則（來自 templates/settings.json）
-    # 要保留，不是被新的沙盒規則整份覆蓋掉。
+    # 既有的 git commit/push、套件安裝 deny 規則（來自
+    # .claude/skills/migration/templates/settings.json）要保留，不是被
+    # 新的沙盒規則整份覆蓋掉。
     assert "Bash(git commit:*)" in permissions["deny"]
 

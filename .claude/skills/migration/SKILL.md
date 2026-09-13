@@ -1,86 +1,111 @@
 ---
 name: migration
 description: >
-  遷移流程的頂層指揮 skill。適用於「批次同類老舊應用」的語言遷移，使用預
-  先包裝好的領域知識（domain-* skills）。Use when the user wants to
+  Top-level orchestrator skill for the migration pipeline. For migrating a
+  batch of similar legacy applications to a new language using pre-packaged
+  domain knowledge (domain-* skills). Use when the user wants to
   migrate/port/rewrite a legacy application to a new language using the
   pre-packaged domain knowledge (domain-* skills).
 ---
 
-# 遷移頂層指揮 skill
+# Migration Orchestrator
 
-你只做一件事：**看 `migration/` 目錄底下現在有什麼，決定下一步呼叫誰**。
-不要自己動手分析、決策或翻譯——那分別是 migration-analyze /
-migration-clarify / migration-convert 的工作。每次呼叫完子 skill，照它自己
-的 gate 規則決定是否停下。
+You do exactly one thing: **look at what's in `migration/` right now and decide
+who to call next.** Never analyze, decide, or translate yourself — that's
+migration-analyze / migration-clarify / migration-convert's job. After each
+sub-skill call, respect its own gate rules on whether to stop.
 
-## 開始之前（人類的一次性 repo 設定）
+## Before you start (one-time human repo setup)
 
-`migration-convert` 開跑前會檢查 `.claude/settings.json` 有沒有擋
-`git commit`/`git push`/套件安裝指令的 deny 規則——沒有就停下，不會自己
-建立（見 `migration-convert` 的 Red Flags 一節）。這件事在
-`migration-analyze`/`migration-clarify` 階段都不需要，所以不會提早卡住，
-但**提早提醒好過讓人走到 convert 才第一次發現**：複製
-`templates/settings.json` 到這個 repo 的 `.claude/settings.json`（或合併
-`deny` 陣列進已有的檔案），細節見 `templates/settings.README.md`。第一次
-在一個新 repo 上跑這個 kit，趁 `migration-clarify` 結束、你在看 rulebook
-簽核的空檔一併弄好，不要等 convert 卡住才回頭處理。
+`migration-convert` checks `.claude/settings.json` for deny rules blocking
+`git commit`/`git push`/package-install commands before it runs — missing
+rules stop it cold, and it won't create them itself (see `migration-convert`'s
+Red Flags). Not needed during analyze/clarify, so it won't block early, but
+flag it early anyway: copy `.claude/skills/migration/templates/settings.json`
+into the repo's `.claude/settings.json` (or merge the `deny` array into an
+existing one — see `.claude/skills/migration/templates/settings.README.md`
+for details). On a repo's first run, do this while the human is signing off
+the rulebook after `migration-clarify`, not after convert gets stuck on it.
 
-## 範圍
+## Scope
 
-範圍到「轉換完成、每個 unit 測試通過、加上一次輕量的整合 build/run 檢
-查」為止（整合檢查的細節在 `migration-convert` 裡，全部 unit pass 後自動
-觸發一次，不需要你額外呼叫誰）。**不包含**原始 kit 裡那種獨立的全域
-build 階段（錯誤變機器佇列、切片給不碰編譯器的 fixer、重跑到乾淨）跟
-Step 6 的行為比對（inherited test suite burndown / parity referee）——這
-兩個是為大規模批次設計的重機械，如果人類要，是刻意的擴充，不要自己假設
-已經包含在內。
+Ends at "conversion done, every unit's tests pass, plus one lightweight
+integration build/run check" (integration-check details live in
+`migration-convert`, auto-triggered once all units pass). **Excludes** the
+original kit's standalone global build phase (error queue, dedicated fixer
+agents, rerun to clean) and its Step 6 behavior-matching machinery (inherited
+test-suite burndown / parity referee) — both are heavy machinery for
+large-scale batches; a deliberate opt-in extension if a human wants it, never
+assume it's already included.
 
-## 路由
+## Routing
 
-1. **`migration/analysis/manifest-draft.tsv` 不存在**：呼叫
-   `migration-analyze`。它是唯讀且可重跑的，跑完**不用等簽核**，直接進第
-   2 步（除非它自己因為循環依賴規模異常而主動要求人類先看）。
+1. **`migration/analysis/depmap/order.txt` doesn't exist**: call
+   `migration-analyze`. Read-only and rerunnable — proceed to step 2
+   without waiting for sign-off, unless it flags unusual cycle complexity
+   itself. (Check `depmap/order.txt`, not `migration/analysis/units.tsv` —
+   `units.tsv` gets renamed in place to `migration/manifest.tsv` once
+   `migration-clarify` fills in `target_path`, so it stops existing after
+   that step. The three depmap script outputs are the only analysis
+   artifacts nothing downstream ever renames or consumes, making them the
+   right signal for "has analysis run yet.")
 
-2. **分析產物齊全，但 `migration/RULEBOOK.md` 或 `migration/manifest.tsv`
-   或 `migration/domain-skill.txt` 缺任一個**：呼叫 `migration-clarify`。
-   它結尾一定會停——**STOP，等人類確認**，不要自己判斷「看起來沒問題」就
-   接著跑第 3 步。
+2. **Analysis artifacts complete, but `migration/RULEBOOK.md` (or its
+   frontmatter is missing `domain_skill`/`ground_truth_tier`/
+   `ground_truth_reason`) or `migration/manifest.tsv` is missing**: call
+   `migration-clarify`. It always stops at the end — **STOP, wait for human
+   confirmation**, don't decide "looks fine" and continue to step 3 yourself.
 
-3. **`migration/pilot-manifest.tsv` 存在，但 `migration/pilot-signoff.txt`
-   不存在**：呼叫 `migration-convert`，manifest 路徑帶
-   `migration/pilot-manifest.tsv`。跑完呈現它回報的 burndown，**STOP，請
-   人類看過結果**。人類（或你在人類明確同意後）才寫
-   `migration/pilot-signoff.txt` 當簽核記號——**即使 pilot 全部
-   pass、沒有任何 rule-gap，也不要自己直接寫這個檔案跳過確認**：pilot 乾
-   淨不等於人類已經簽核，這條線不能省。
+3. **`migration/manifest.tsv` has rows marked `pilot=yes`, but
+   `migration/pilot-signoff.txt` doesn't exist**: call `migration-convert`
+   with `migration/manifest.tsv`, telling it to **process only `pilot=yes`
+   rows**. Present its burndown report, **STOP, human reviews it**. Only the
+   human (or you, with their explicit agreement) writes
+   `migration/pilot-signoff.txt` as the sign-off marker — **even if the
+   pilot is 100% clean with zero rule-gaps, never write this file yourself
+   to skip confirmation**: a clean pilot isn't the same as human sign-off.
 
-4. **pilot 已簽核，`migration/manifest.tsv` 裡還有 unit 不是 `pass`/
-   `excluded` 狀態**：呼叫 `migration-convert`，manifest 路徑帶
-   `migration/manifest.tsv`（完整批次）。pilot 跑過的 unit 因為狀態已經是
-   `pass`，這次會自動跳過，不會重做；`excluded` 的 unit（私有套件本身的
-   實作，被目標端 library 取代）本來就不需要轉換，也會直接跳過。跑完呈
-   現最終 burndown，STOP。
+4. **Pilot signed off, `migration/manifest.tsv` still has units not
+   `pass`/`excluded`**: call `migration-convert` with
+   `migration/manifest.tsv`, telling it to **process all rows (not limited
+   to `pilot`)**. Pilot units are already `pass` and get skipped
+   automatically; `excluded` units (private-package implementations
+   replaced by target-side library) never needed conversion and get skipped
+   too. Present the final burndown, STOP.
 
-5. **manifest 全部 `pass`/`excluded`，但 `migration/state/_integration.json`
-   不存在或 `status` 不是 `pass`**：再呼叫一次 `migration-convert`（帶完整
-   manifest）——它會發現所有 unit 都過了（或不需要轉換），觸發那次一次
-   性的整合 build/run 檢查。整合檢查失敗不算「完成」，STOP，列出症狀給
-   人類判斷退回哪個 unit。
+5. **manifest all `pass`/`excluded`, but
+   `migration/state/_integration.json` doesn't exist or `status` isn't
+   `pass`**: call `migration-convert` again (full manifest) — it detects
+   every unit is done and triggers the one-time integration build/run
+   check. A failed check doesn't count as "done" — STOP, list the symptoms
+   for the human to decide which unit to send back.
 
-6. **manifest 全部 `pass`/`excluded` 且整合檢查也 `pass`**：回報完成。如果
-   `migration/rulebook-amendments.md` 裡還有待處理項目，列出來提醒人
-   類——那些是規則缺口的紀錄，不會自己被套用。
+6. **Integration check `pass`, `RULEBOOK.md` frontmatter has
+   `parity_check: enabled`, but `_integration.json`'s `parity_status` is
+   missing or not `pass`/`skipped`**: call `migration-convert`, telling it
+   the task this time is "parity check" (not the manifest-scanning loop).
+   `parity_status: fail` → STOP, list symptoms for the human to decide which
+   unit to send back; `pass` → proceed to step 7. No `parity_check:
+   enabled` → treat `parity_status` as `skipped` without actually calling
+   this step, proceed to step 7.
 
-## 批次使用
+7. **manifest all `pass`/`excluded`, integration check `pass`, and
+   `parity_status` is `pass` or `skipped`**: report done. If
+   `migration/rulebook-amendments.md` still has open items, list them for
+   the human — those are logged rule gaps, not auto-applied.
 
-同一批老舊應用通常是多個各自獨立的 repo/checkout，不是同一個 repo 裡塞多
-個實例。對下一個實例重跑這個 skill，會是全新的 `migration/` 目錄、從第 1
-步開始——只是 migration-clarify 選 domain skill 那步，多半會因為指紋比對
-猜對而很快確認，不用每次重新想一輪。
+## Batch usage
 
-## 你不該做的事
+The same batch of legacy apps is usually many separate repos/checkouts, not
+multiple instances crammed into one repo. Rerunning this skill for the next
+instance starts fresh at step 1 with a brand-new `migration/` directory —
+only the domain-skill selection in `migration-clarify` tends to confirm fast
+since the fingerprint match usually guesses right, not a from-scratch
+decision each time.
 
-- 不要因為某一步「看起來很簡單」就自己動手做掉，改成呼叫對應的子 skill。
-- 不要在任何一個 STOP 點之後自己判斷「應該沒問題」就繼續——每個 gate 存
-  在都是因為錯在這裡最貴，用停下來換確定性。
+## What not to do
+
+- Don't do a step yourself just because it "looks simple" — call the right
+  sub-skill instead.
+- Don't judge "probably fine" and continue past a STOP point — every gate
+  exists because errors here are the most expensive; stopping buys certainty.

@@ -1,62 +1,100 @@
 ---
 name: migration-analyze
 description: >
-  分析 skill：由頂層指揮 skill 在 migration/analysis/ 產物還不存在時呼
-  叫，唯讀掃描舊程式碼決定 unit 遷移順序。不要在其他情境下使用——規則決
-  策、domain skill 選定、目標路徑都不是這裡的工作。
+  Analysis skill: called by the top-level orchestrator when
+  migration/analysis/ artifacts don't exist yet. Read-only scan of legacy
+  code to decide unit migration order. Do not use outside this context —
+  rule decisions, domain-skill selection, and target paths are not this
+  skill's job.
 ---
 
-# 分析 skill
+# Analysis Skill
 
-你只產生**事實**，不做**決策**。依賴圖是誰依賴誰，是客觀的；要不要照這個順
-序翻譯、翻譯成什麼樣子，不是你的工作。
+You produce **facts**, not **decisions**. The dependency graph — who depends
+on whom — is objective; whether/how to translate in that order is not your
+call.
 
-## 為什麼這步不能決定 target_path
+## Why this step can't decide target_path
 
-目標路徑的命名慣例來自 domain skill 的模板專案，而 domain skill 要到
-migration-clarify 才會被選定（分析先跑，選 domain skill 在後面）。所以這裡
-只排「順序」，不填「目標在哪」——manifest 草稿留給 migration-clarify 補完。
+Target-path naming conventions come from the domain skill's template-project
+section, and the domain skill isn't selected until `migration-clarify` (analysis
+runs first, domain-skill selection comes later). So this step only orders
+things — it doesn't fill in "where it goes." That's left for
+`migration-clarify` to complete on the manifest draft.
 
-## 依賴圖：用腳本，不要用判斷力排序
+## Dependency graph: use a script, not judgment
 
-依賴順序、循環偵測是可以被腳本精確算出來的問題，不要靠 agent 讀程式碼用直
-覺排。
+Dependency order and cycle detection are exactly computable by script — don't
+have the agent eyeball code and order it by feel.
 
-1. 檢查 `migration/scripts/depmap_<source language>.*` 是否已經存在——如果
-   這個批次先前的實例已經寫過同語言的依賴分析腳本，直接重用，不要重寫。
-2. 不存在就依源語言寫一支（parse import/require/include 語句，產出檔案層
-   級的邊），存到這個路徑供批次後續實例重用。
-3. 跑腳本，輸出：
-   - `migration/analysis/depmap/edges.tsv`（from, to）
-   - `migration/analysis/depmap/order.txt`（拓樸排序後的檔案順序）
-   - `migration/analysis/depmap/cycles.txt`（循環依賴的分組，如果有）
+1. Check whether `.claude/skills/migration/scripts/depmap_<source
+   language>.*` exists first — this is pre-written and validated, shipped
+   with the `migration` skill itself (currently `depmap_vb6.py`,
+   `depmap_delphi.py`), not something this migration run generates on the
+   fly. If it exists, **run it directly from that path — don't copy it into
+   `migration/scripts/` first.** Copying just adds a file to keep in sync;
+   this script isn't owned by this migration run, it's owned by the
+   `migration` skill itself. If you spot inaccurate parsing, log it in
+   `units.tsv`'s `risk_reason` column for a human to decide whether to fix
+   the script later — don't patch it yourself, and don't save an edited copy
+   under `migration/scripts/` (the next call still looks at
+   `.claude/skills/migration/scripts/` first, so that copy would never be
+   used anyway).
+2. Only if no packaged script exists for this source language, check whether
+   `migration/scripts/depmap_<source language>.*` already exists — if an
+   earlier instance in this batch already wrote a dependency-analysis
+   script for the same language, reuse it, don't rewrite it.
+3. Only if neither exists, write one for the source language (parse
+   import/require/include statements, produce file-level edges), save it to
+   `migration/scripts/depmap_<source language>.*` for later instances in
+   this batch to reuse. Note in your report that this language has no
+   packaged version yet — worth promoting into
+   `.claude/skills/migration/scripts/` if the batch will hit this language
+   again, but that's a human/skill-maintainer decision, not yours to act on.
+4. Run the script. Output:
+   - `migration/analysis/depmap/edges.tsv` (from, to)
+   - `migration/analysis/depmap/order.txt` (topologically sorted file order)
+   - `migration/analysis/depmap/cycles.txt` (cyclic-dependency groups, if any)
+   - `migration/analysis/depmap/external-refs.tsv` (source_path, reference —
+     references that don't resolve to a local file, native standard-library
+     calls and private packages listed together without distinction; that
+     classification is a judgment call, not a fact, and belongs to
+     `migration-clarify`'s rulebook-drafting step, not here)
 
-## 循環依賴怎麼處理
+## Handling cyclic dependencies
 
-不要嘗試自己解開循環。同一個循環裡的所有檔案，在 manifest 草稿裡合併成同
-一個 `unit_id`（一起轉換、一起測試、一起審查），用同一個 `cycle_group` 值
-標記。這是唯一能讓拓樸順序在有循環的情況下依然成立的做法。
+Don't try to break cycles yourself. Merge every file in the same cycle into
+one `unit_id` in `units.tsv` (converted, tested, and reviewed together),
+tagged with the same `cycle_group` value — the only way topological order
+still holds when cycles exist.
 
-## 輸出
+## Output
 
-1. `migration/analysis/modules.tsv` — 欄位：`unit_id, source_path,
-   cycle_group`（無循環則空白）。
-2. `migration/analysis/risk-notes.tsv` — 欄位：`unit_id, risk_flag
-   (high/normal), reason`。高風險判斷依據：檔案大小/複雜度異常、fan-out
-   異常高、出現分析腳本無法完整解析的語法。這份清單後面會被 pilot 子集選樣
-   用到。
-3. `migration/analysis/manifest-draft.tsv` — 欄位：`unit_id, source_path,
-   cycle_group, order_index`，依拓樸順序排列。
+One table: `migration/analysis/units.tsv` — columns `unit_id, source_path,
+cycle_group, order_index, risk_flag, risk_reason`, in topological order
+(`order_index` can be left blank and inferred from row order; writing it out
+just makes the number visible without anyone having to count rows).
 
-## 邊界
+The three column groups map to script-computed facts plus your own risk
+judgment — not three unrelated artifacts bolted together:
+`unit_id`/`source_path`/`cycle_group`/`order_index` come directly from
+`edges.tsv`/`order.txt`/`cycles.txt`; `risk_flag` (`high`/`normal`) and
+`risk_reason` are your own judgment (basis: abnormal file size/complexity,
+abnormally high fan-out, syntax the analysis script couldn't fully parse),
+not script output. `risk_flag` later drives `migration-clarify`'s pilot-subset
+selection (prioritize `high`-flagged units for the pilot).
 
-唯讀。不碰 rulebook、inventory、domain skill 選擇，不寫任何 unit 的程式碼，
-不產生最終 `migration/manifest.tsv`（那需要 target_path，屬於
-migration-clarify 的工作）。
+## Boundaries
 
-## 結束條件
+Read-only. Don't touch the rulebook, inventory, or domain-skill selection;
+don't write any unit's code; don't produce the final `migration/manifest.tsv`
+(that needs `target_path`, which is `migration-clarify`'s job).
 
-四個輸出檔案都產出就停，回報摘要（unit 數、循環組數、高風險 unit 數）。這
-步是唯讀、可重跑，不需要人類簽核就能讓頂層指揮 skill 直接接著跑
-migration-clarify——除非循環依賴的規模或複雜度反常到你判斷應該讓人類先看
-一眼，才主動提示。
+## Done when
+
+Stop once the three `migration/analysis/depmap/` intermediate files and
+`units.tsv` all exist; report a summary (unit count, cycle-group count,
+high-risk unit count). Read-only and rerunnable — the top-level orchestrator
+can go straight to `migration-clarify` without human sign-off, unless the
+scale or complexity of cycles is unusual enough that you judge a human should
+look first.

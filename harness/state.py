@@ -19,17 +19,17 @@ class UnitState:
 class RunState:
     run_dir: Path
     manifest_rows: list[dict[str, str]] = field(default_factory=list)
-    pilot_manifest_exists: bool = False
+    pilot_unit_ids: list[str] = field(default_factory=list)
     pilot_signoff_exists: bool = False
     unit_states: dict[str, UnitState] = field(default_factory=dict)
     integration_status: str | None = None
     deviation_rows: list[dict[str, str]] = field(default_factory=list)
     rulebook_amendments_pending: bool = False
     decision_log_last_status: str | None = None
+    domain_skill: str | None = None
     ground_truth_tier: str | None = None
 
 
-_MANIFEST_FIELDS = ["unit_id", "source_path", "target_path"]
 _DEVIATION_FIELDS = ["timestamp", "unit_id", "category", "detail"]
 
 
@@ -42,6 +42,18 @@ def _read_tsv(path: Path, fieldnames: list[str], skip_header: bool = False) -> l
         lines = lines[1:]
     reader = csv.DictReader(lines, fieldnames=fieldnames, delimiter="\t")
     return list(reader)
+
+
+def _read_tsv_with_header(path: Path) -> list[dict[str, str]]:
+    # manifest.tsv's column set/order isn't fixed (migration-analyze's
+    # unit_id/source_path/cycle_group/order_index/risk_flag/risk_reason,
+    # plus target_path and pilot added later by migration-clarify) — read
+    # the real header row instead of assuming a fixed column list/order.
+    if not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        return list(reader)
 
 
 def _read_unit_states(migration_dir: Path) -> dict[str, UnitState]:
@@ -88,22 +100,55 @@ def _read_decision_log_last_status(migration_dir: Path) -> str | None:
     return matches[-1] if matches else None
 
 
-def _read_ground_truth_tier(migration_dir: Path) -> str | None:
-    path = migration_dir / "ground-truth-strategy.md"
+_FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---", re.DOTALL)
+
+
+def _read_rulebook_frontmatter(migration_dir: Path) -> dict[str, str]:
+    # domain_skill/ground_truth_tier/ground_truth_reason/target_shape/
+    # parity_check all live as flat `key: value` lines in RULEBOOK.md's YAML
+    # frontmatter (see migration-clarify) — no nested structures here, so a
+    # tiny hand-rolled parser avoids pulling in a YAML dependency just for
+    # this.
+    path = migration_dir / "RULEBOOK.md"
     if not path.exists():
-        return None
-    first_line = path.read_text(encoding="utf-8").splitlines()[0] if path.stat().st_size else ""
-    match = re.match(r"^tier:\s*(environment|snapshot|inference)\s*$", first_line.strip())
-    return match.group(1) if match else None
+        return {}
+    match = _FRONTMATTER_RE.match(path.read_text(encoding="utf-8"))
+    if not match:
+        return {}
+    result: dict[str, str] = {}
+    for line in match.group(1).splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        result[key.strip()] = value.strip()
+    return result
+
+
+def _read_domain_skill(migration_dir: Path) -> str | None:
+    return _read_rulebook_frontmatter(migration_dir).get("domain_skill") or None
+
+
+def _read_ground_truth_tier(migration_dir: Path) -> str | None:
+    tier = _read_rulebook_frontmatter(migration_dir).get("ground_truth_tier")
+    return tier or None
+
+
+def _pilot_unit_ids(manifest_rows: list[dict[str, str]]) -> list[str]:
+    return [
+        row["unit_id"]
+        for row in manifest_rows
+        if row.get("pilot", "").strip().lower() == "yes"
+    ]
 
 
 def read_run_state(run_dir: Path) -> RunState:
     migration_dir = run_dir / "migration"
-    manifest_path = migration_dir / "manifest.tsv"
+    manifest_rows = _read_tsv_with_header(migration_dir / "manifest.tsv")
     return RunState(
         run_dir=run_dir,
-        manifest_rows=_read_tsv(manifest_path, _MANIFEST_FIELDS, skip_header=True),
-        pilot_manifest_exists=(migration_dir / "pilot-manifest.tsv").exists(),
+        manifest_rows=manifest_rows,
+        pilot_unit_ids=_pilot_unit_ids(manifest_rows),
         pilot_signoff_exists=(migration_dir / "pilot-signoff.txt").exists(),
         unit_states=_read_unit_states(migration_dir),
         integration_status=_read_integration_status(migration_dir),
@@ -114,5 +159,6 @@ def read_run_state(run_dir: Path) -> RunState:
         deviation_rows=_read_tsv(migration_dir / "deviation-log.tsv", _DEVIATION_FIELDS, skip_header=False),
         rulebook_amendments_pending=_read_rulebook_amendments_pending(migration_dir),
         decision_log_last_status=_read_decision_log_last_status(migration_dir),
+        domain_skill=_read_domain_skill(migration_dir),
         ground_truth_tier=_read_ground_truth_tier(migration_dir),
     )

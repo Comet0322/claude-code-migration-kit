@@ -20,7 +20,7 @@ def test_needs_human_when_decision_log_says_so():
 
 def test_continue_and_auto_signoff_when_pilot_clean():
     state = _base_state(
-        pilot_manifest_exists=True,
+        pilot_unit_ids=["A", "B"],
         pilot_signoff_exists=False,
         unit_states={
             "A": UnitState("A", "pass", {}, ""),
@@ -28,75 +28,44 @@ def test_continue_and_auto_signoff_when_pilot_clean():
         },
         rulebook_amendments_pending=False,
     )
-    # pilot-manifest.tsv 需要真的存在讓 _pilot_unit_ids 讀得到
-    import tempfile
-    from pathlib import Path
-    with tempfile.TemporaryDirectory() as tmp:
-        run_dir = Path(tmp)
-        migration_dir = run_dir / "migration"
-        migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text(
-            "unit_id\tsource_path\ttarget_path\nA\tx\ty\nB\tx\ty\n", encoding="utf-8"
-        )
-        state.run_dir = run_dir
 
-        decision = evaluate_gate(state)
+    decision = evaluate_gate(state)
 
     assert decision.outcome == Outcome.CONTINUE
     assert decision.write_pilot_signoff is True
 
 
 def test_needs_human_when_pilot_not_clean():
-    import tempfile
-    from pathlib import Path
     state = _base_state(
-        pilot_manifest_exists=True,
+        pilot_unit_ids=["A"],
         pilot_signoff_exists=False,
         unit_states={"A": UnitState("A", "fail-test", {}, "")},
     )
-    with tempfile.TemporaryDirectory() as tmp:
-        run_dir = Path(tmp)
-        migration_dir = run_dir / "migration"
-        migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text(
-            "unit_id\tsource_path\ttarget_path\nA\tx\ty\n", encoding="utf-8"
-        )
-        state.run_dir = run_dir
 
-        decision = evaluate_gate(state)
+    decision = evaluate_gate(state)
 
     assert decision.outcome == Outcome.NEEDS_HUMAN
 
 
 def test_continue_when_pilot_unit_still_pending_with_no_state_file_and_nothing_failed():
     # regression test (found via real end-to-end validation in Task 9, not
-    # just unit-level review): a unit listed in pilot-manifest.tsv with no
-    # state file yet (still pending — migration-convert may not have been
-    # invoked for it at all yet) must NOT be silently treated as "clean"
-    # (must not auto-signoff), but it also must NOT be treated as "dirty,
-    # needs a human" — nothing has actually gone wrong, migration-convert
-    # just hasn't finished (or started) processing it. The correct action
-    # is to keep looping so the next `claude -p` turn lets the router call
-    # migration-convert. Only an actual FAILURE status should stop for
-    # human review — see test_needs_human_when_pilot_not_clean below for
-    # that case (unit "A" has status "fail-test").
-    import tempfile
-    from pathlib import Path
+    # just unit-level review): a unit listed in manifest.tsv's `pilot`
+    # column with no state file yet (still pending — migration-convert may
+    # not have been invoked for it at all yet) must NOT be silently treated
+    # as "clean" (must not auto-signoff), but it also must NOT be treated as
+    # "dirty, needs a human" — nothing has actually gone wrong,
+    # migration-convert just hasn't finished (or started) processing it. The
+    # correct action is to keep looping so the next `claude -p` turn lets
+    # the router call migration-convert. Only an actual FAILURE status
+    # should stop for human review — see test_needs_human_when_pilot_not_clean
+    # above for that case (unit "A" has status "fail-test").
     state = _base_state(
-        pilot_manifest_exists=True,
+        pilot_unit_ids=["A", "B"],
         pilot_signoff_exists=False,
         unit_states={"A": UnitState("A", "pass", {}, "")},  # B has no entry at all
     )
-    with tempfile.TemporaryDirectory() as tmp:
-        run_dir = Path(tmp)
-        migration_dir = run_dir / "migration"
-        migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text(
-            "unit_id\tsource_path\ttarget_path\nA\tx\ty\nB\tx\ty\n", encoding="utf-8"
-        )
-        state.run_dir = run_dir
 
-        decision = evaluate_gate(state)
+    decision = evaluate_gate(state)
 
     assert decision.outcome == Outcome.CONTINUE
     assert decision.write_pilot_signoff is False

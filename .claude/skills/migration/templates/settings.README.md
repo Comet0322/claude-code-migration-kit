@@ -5,8 +5,8 @@
 在跑 `migration-convert` 之前裝好**，`migration-convert` 開跑前的檢查會
 確認它存在，缺了就停下、不會自己補（見 `.claude/skills/migration-convert
 /SKILL.md` 的「Red Flags」一節）。裝的動作是複製，不是建議：
-`cp templates/settings.json <target repo>/.claude/settings.json`（或手動
-合併 `deny` 陣列）。
+`cp .claude/skills/migration/templates/settings.json <target
+repo>/.claude/settings.json`（或手動合併 `deny` 陣列）。
 
 這份清單是防止**在迴圈裡**意外呼叫到的動作被擋下，不是安全邊界——寫得夠
 狠的 wrapper script 一樣繞得過 pattern matching。這條紅線的重點是「agent

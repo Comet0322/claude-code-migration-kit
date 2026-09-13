@@ -59,14 +59,6 @@ Logger.Write evtError, "db timeout", "unit=u456"
 未知，需要在 migration-clarify 階段當場確認——VB6 IDE 大概率這台機器裝不
 起來，優先假設要走 snapshot 或 inference 層級。
 
-## 模板專案
-
-這批應用的目標 Python 專案可能是 FastAPI 服務或背景 ETL 批次，兩者擇
-一，由 `migration-clarify` 跟人類確認（見「決定目標端專案形狀」節），寫進
-`migration/target-shape.txt`：
-- 同 skill `python-template` 的「專案形狀：FastAPI 常駐服務」節
-- 同 skill `python-template` 的「專案形狀：背景 ETL 批次」節
-
 ## 語法轉換 / library 替換規則
 
 | VB6（`CorpUtil300`） | Python（`python-template`） | 備註 |
@@ -77,12 +69,19 @@ Logger.Write evtError, "db timeout", "unit=u456"
 | `Logger.Write evtInformation, msg, "k=v,k2=v2"` | `logger.info(msg, extra={"k": "v", "k2": "v2"})` | 逗號分隔的 key=value（注意跟部門 200 的分號不同，不要套錯規則）。 |
 | 寫進 Windows Event Log | 寫 stdout JSON，交給外部 log 收集器 | **這是刻意的架構調整**（遷移到 air-gapped/跨平台環境後不再有 Windows Event Log 可寫），不是遺漏；rulebook 要記一條「行為改變，已由人類確認」。 |
 
+## 模板專案
+
+這批應用的目標 Python 專案可能是 FastAPI 服務或背景 ETL 批次，兩者擇
+一，由 `migration-clarify` 跟人類確認（見「Decide target project shape」節）：
+- 同 skill `python-template` 的「專案形狀：FastAPI 常駐服務」節
+- 同 skill `python-template` 的「專案形狀：背景 ETL 批次」節
+
 ## 新語言 library 文件
 
 同 skill `python-template` 的「corplib 使用方式」節。
 
 ## 測試 / build 方法
 
-隨模板形狀決定，見 `migration/target-shape.txt` 指到的形狀，對應
-`python-template` 的「測試 / build 方法（FastAPI）」或「測試 / build
-方法（ETL 批次）」節（不再重複貼）。
+隨 `migration-clarify` 已確認的模板形狀決定，對應 `python-template` 的
+「測試 / build 方法（FastAPI）」或「測試 / build 方法（ETL 批次）」節
+（不再重複貼）。

@@ -21,12 +21,19 @@ description: >
    都適用，只講一次，不在每個形狀底下重複。
 2. **專案形狀模板**——公司內部目前有兩種：**FastAPI 常駐服務**、**背景
    ETL 批次**。先確認這批應用屬於哪一種形狀（由 `migration-clarify` 跟
-   人類確認，見「決定目標端專案形狀」節，寫進 `migration/target-shape.txt`），再看對應
-   那節的目錄結構/進入點/測試build方法，不要兩節都套用。
+   人類確認，見「Decide target project shape」節），再看對應那節的目錄結構/進入
+   點/測試build方法，不要兩節都套用。
 
 在 legacy 遷移的情境中，`domain-200-delphi-python`、`domain-300-vb-python`
 兩個 domain skill 的目標端知識（模板專案、library 文件、測試/build 方
 法）都指向這裡，不要重複貼。
+
+`vendor/corplib-python/` 這個子資料夾放的是 `corplib` 的一份真實、可安
+裝、可執行的最小實作（後端是 SQLite，不是下面文件描述的正牌 MS SQL
+Server，僅供 harness 測試基礎設施驗證整條 pipeline 真的能 import、能執
+行、測試真的能過/不過用，不是公司內部正式套件、也不是這份文件描述行為
+的替代品）——跟這份 SKILL.md 放在同一個 skill 資料夾底下維護，不是獨立
+的東西。
 
 ## corplib 使用方式（DB + Logging）
 

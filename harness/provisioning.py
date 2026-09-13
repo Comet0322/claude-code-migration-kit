@@ -5,15 +5,18 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-# 這批子目錄是 domain skill / migration-convert 在跑的過程中真的需要讀的
-# 參考資料（skill 定義、目標端 library 原始碼）。除了這幾個子樹跟這次 run
-# 自己的工作目錄之外，repo 裡其他任何東西（其他 run 的產物、fixtures/、
-# harness/ 自己的原始碼、之前手動跑過留下的範例 migration/ 產出……）一律
-# 讀不到、寫不到——Task 9 端到端驗收時撞到一次真的問題：agent 在 repo 根
-# 目錄翻到一份之前手動跑過的部門 200 遷移範例，拿它的實作當「先例」推翻
-# 自己原本從 domain skill/rulebook 推出的決定，汙染了這次本該獨立判斷的
-# headless 測試。
-_ALLOWED_REPO_SUBTREES = (".claude", "vendor")
+# 這個子目錄是 domain skill / migration-convert 在跑的過程中真的需要讀的
+# 參考資料（skill 定義、目標端 library 原始碼——目標端 library 的真實可
+# 執行實作現在放在各自 template skill 自己的 vendor/ 子資料夾底下，例如
+# `.claude/skills/python-template/vendor/corplib-python/`，跟著 skill 一
+# 起在 `.claude/` 底下，不再是 repo 根目錄自己的子樹，所以這裡只需要白名
+# 單一個子樹）。除了這個子樹跟這次 run 自己的工作目錄之外，repo 裡其他任
+# 何東西（其他 run 的產物、fixtures/、harness/ 自己的原始碼、之前手動跑
+# 過留下的範例 migration/ 產出……）一律讀不到、寫不到——Task 9 端到端驗
+# 收時撞到一次真的問題：agent 在 repo 根目錄翻到一份之前手動跑過的部門
+# 200 遷移範例，拿它的實作當「先例」推翻自己原本從 domain skill/rulebook
+# 推出的決定，汙染了這次本該獨立判斷的 headless 測試。
+_ALLOWED_REPO_SUBTREES = (".claude",)
 
 # permissions.deny/allow（管 Read/Edit/Grep/Glob 這些內建工具）跟 sandbox
 # filesystem 的 deny/allow 語意不一樣：sandbox 那邊「較窄的 allow 可以重新
@@ -32,7 +35,6 @@ _DENIED_REPO_SUBTREES_FOR_NATIVE_TOOLS = (
     "migration",
     "fixtures",
     "harness",
-    "templates",
     "docs",
     "code-migration-kit-with-claude-code",
 )
@@ -77,9 +79,8 @@ def create_run_dir(fixture_name: str, mode: str, runs_root: Path) -> Path:
     return run_dir
 
 
-def _seed_settings(run_dir: Path, templates_root: Path) -> None:
+def _seed_settings(run_dir: Path, repo_root: Path, templates_root: Path) -> None:
     base = json.loads((templates_root / "settings.json").read_text(encoding="utf-8"))
-    repo_root = templates_root.resolve().parent
     sandboxed = _sandbox_settings(repo_root, run_dir)
 
     permissions = base.setdefault("permissions", {})
@@ -91,18 +92,35 @@ def _seed_settings(run_dir: Path, templates_root: Path) -> None:
     (claude_dir / "settings.json").write_text(json.dumps(base, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def provision_e2e(fixture_name: str, run_dir: Path, fixtures_root: Path, templates_root: Path) -> None:
+def provision_e2e(
+    fixture_name: str,
+    run_dir: Path,
+    fixtures_root: Path,
+    repo_root: Path,
+    templates_root: Path,
+    force_domain_skill: str | None = None,
+) -> None:
     fixture_dir = fixtures_root / fixture_name
     shutil.copytree(fixture_dir / "legacy", run_dir / "legacy")
-    _seed_settings(run_dir, templates_root)
+    _seed_settings(run_dir, repo_root, templates_root)
     migration_dir = run_dir / "migration"
     migration_dir.mkdir(parents=True, exist_ok=True)
     (migration_dir / ".headless-test").write_text("", encoding="utf-8")
+    # 只用來讓 fixture 對「fingerprint 本來就設計成模糊」的來源（例如
+    # dept200-delphi 同時對得上 domain-200-delphi-java/-python）強制指定
+    # 要選哪個 domain skill，藉此讓那個 domain skill 的完整轉換流程也能被
+    # e2e 跑到、而不是每次都卡在 needs-human——見
+    # migration-clarify 的 Headless test protocol 段落。真實遷移不會有這
+    # 個檔案。
+    if force_domain_skill:
+        (migration_dir / ".headless-test-domain-skill").write_text(
+            force_domain_skill + "\n", encoding="utf-8"
+        )
 
 
-def provision_convert_only(fixture_name: str, run_dir: Path, fixtures_root: Path, templates_root: Path) -> None:
+def provision_convert_only(fixture_name: str, run_dir: Path, fixtures_root: Path, repo_root: Path, templates_root: Path) -> None:
     fixture_dir = fixtures_root / fixture_name
     shutil.copytree(fixture_dir / "legacy", run_dir / "legacy")
-    _seed_settings(run_dir, templates_root)
+    _seed_settings(run_dir, repo_root, templates_root)
     golden_dir = fixture_dir / "golden-convert-input"
     shutil.copytree(golden_dir, run_dir / "migration", dirs_exist_ok=True)
