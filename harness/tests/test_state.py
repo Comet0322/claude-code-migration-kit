@@ -27,6 +27,7 @@ def test_populated_run_dir_parses_all_files(tmp_path: Path):
     state_dir.mkdir(parents=True)
 
     (migration_dir / "manifest.tsv").write_text(
+        "unit_id\tsource_path\ttarget_path\n"
         "UserSync\tlegacy/UserSync.bas\ttarget/user_sync.py\n",
         encoding="utf-8",
     )

@@ -84,12 +84,13 @@ def evaluate_gate(state: RunState) -> GateDecision:
 
 
 def _pilot_unit_ids(state: RunState) -> list[str]:
+    # pilot-manifest.tsv 有標題列（unit_id/source_path/target_path），跟
+    # manifest.tsv 同格式（Task 9 端到端驗收發現，見 state.py 的同類修
+    # 正）——第一行永遠跳過，不當成一個 unit id。
     pilot_path = state.run_dir / "migration" / "pilot-manifest.tsv"
     if not pilot_path.exists():
         return []
-    ids = []
-    for line in pilot_path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        ids.append(line.split("\t", 1)[0])
-    return ids
+    lines = [line for line in pilot_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if lines:
+        lines = lines[1:]
+    return [line.split("\t", 1)[0] for line in lines]

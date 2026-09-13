@@ -33,12 +33,15 @@ _MANIFEST_FIELDS = ["unit_id", "source_path", "target_path"]
 _DEVIATION_FIELDS = ["timestamp", "unit_id", "category", "detail"]
 
 
-def _read_tsv(path: Path, fieldnames: list[str]) -> list[dict[str, str]]:
+def _read_tsv(path: Path, fieldnames: list[str], skip_header: bool = False) -> list[dict[str, str]]:
     if not path.exists():
         return []
     with path.open(newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh, fieldnames=fieldnames, delimiter="\t")
-        return list(reader)
+        lines = fh.readlines()
+    if skip_header and lines:
+        lines = lines[1:]
+    reader = csv.DictReader(lines, fieldnames=fieldnames, delimiter="\t")
+    return list(reader)
 
 
 def _read_unit_states(migration_dir: Path) -> dict[str, UnitState]:
@@ -99,12 +102,12 @@ def read_run_state(run_dir: Path) -> RunState:
     manifest_path = migration_dir / "manifest.tsv"
     return RunState(
         run_dir=run_dir,
-        manifest_rows=_read_tsv(manifest_path, _MANIFEST_FIELDS),
+        manifest_rows=_read_tsv(manifest_path, _MANIFEST_FIELDS, skip_header=True),
         pilot_manifest_exists=(migration_dir / "pilot-manifest.tsv").exists(),
         pilot_signoff_exists=(migration_dir / "pilot-signoff.txt").exists(),
         unit_states=_read_unit_states(migration_dir),
         integration_status=_read_integration_status(migration_dir),
-        deviation_rows=_read_tsv(migration_dir / "deviation-log.tsv", _DEVIATION_FIELDS),
+        deviation_rows=_read_tsv(migration_dir / "deviation-log.tsv", _DEVIATION_FIELDS, skip_header=False),
         rulebook_amendments_pending=_read_rulebook_amendments_pending(migration_dir),
         decision_log_last_status=_read_decision_log_last_status(migration_dir),
         ground_truth_tier=_read_ground_truth_tier(migration_dir),

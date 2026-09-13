@@ -35,7 +35,9 @@ def test_continue_and_auto_signoff_when_pilot_clean():
         run_dir = Path(tmp)
         migration_dir = run_dir / "migration"
         migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text("A\tx\ty\nB\tx\ty\n", encoding="utf-8")
+        (migration_dir / "pilot-manifest.tsv").write_text(
+            "unit_id\tsource_path\ttarget_path\nA\tx\ty\nB\tx\ty\n", encoding="utf-8"
+        )
         state.run_dir = run_dir
 
         decision = evaluate_gate(state)
@@ -56,7 +58,9 @@ def test_needs_human_when_pilot_not_clean():
         run_dir = Path(tmp)
         migration_dir = run_dir / "migration"
         migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text("A\tx\ty\n", encoding="utf-8")
+        (migration_dir / "pilot-manifest.tsv").write_text(
+            "unit_id\tsource_path\ttarget_path\nA\tx\ty\n", encoding="utf-8"
+        )
         state.run_dir = run_dir
 
         decision = evaluate_gate(state)
@@ -87,7 +91,9 @@ def test_continue_when_pilot_unit_still_pending_with_no_state_file_and_nothing_f
         run_dir = Path(tmp)
         migration_dir = run_dir / "migration"
         migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text("A\tx\ty\nB\tx\ty\n", encoding="utf-8")
+        (migration_dir / "pilot-manifest.tsv").write_text(
+            "unit_id\tsource_path\ttarget_path\nA\tx\ty\nB\tx\ty\n", encoding="utf-8"
+        )
         state.run_dir = run_dir
 
         decision = evaluate_gate(state)
