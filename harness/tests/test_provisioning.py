@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -58,3 +59,50 @@ def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Pat
     assert (run_dir / "migration" / "manifest.tsv").exists()
     assert (run_dir / "migration" / "RULEBOOK.md").exists()
     assert not (run_dir / "migration" / ".headless-test").exists()
+
+
+def test_provision_e2e_sandboxes_run_dir_and_keeps_existing_deny_rules(tmp_path: Path):
+    # regression test: Task 9 端到端驗收發現 agent 會用 Bash 的 cd 逃出
+    # run_dir，讀到 repo 根目錄殘留的其他遷移產物當「先例」污染決策。修法
+    # 是預設整個 repo 都讀不到、寫不到，只白名單 .claude/、vendor/（domain
+    # skill 跟目標端 library 文件）跟這次 run 自己的工作目錄。
+    fixtures_root = tmp_path / "fixtures"
+    templates_root = tmp_path / "templates"
+    _make_fixture(fixtures_root, "dept200-vb6")
+    templates_root.mkdir(parents=True, exist_ok=True)
+    (templates_root / "settings.json").write_text(
+        json.dumps({"permissions": {"deny": ["Bash(git commit:*)"]}}), encoding="utf-8"
+    )
+    repo_root = tmp_path
+    run_dir = tmp_path / "runs" / "run1"
+    run_dir.mkdir(parents=True)
+
+    provision_e2e("dept200-vb6", run_dir, fixtures_root, templates_root)
+
+    settings = json.loads((run_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
+
+    repo_root_abs = str(repo_root.resolve()).lstrip("/")
+    run_dir_abs = str(run_dir.resolve()).lstrip("/")
+
+    assert settings["sandbox"]["enabled"] is True
+    assert settings["sandbox"]["failIfUnavailable"] is True
+    deny_read = settings["sandbox"]["filesystem"]["denyRead"]
+    allow_read = settings["sandbox"]["filesystem"]["allowRead"]
+    assert f"//{repo_root_abs}/**" in deny_read
+    assert f"//{repo_root_abs}/.claude/**" in allow_read
+    assert f"//{repo_root_abs}/vendor/**" in allow_read
+    assert f"//{run_dir_abs}/**" in allow_read
+
+    # permissions.deny/allow 的語意跟 sandbox filesystem 不同——deny 永遠
+    # 贏，較窄的 allow 蓋不過較寬的 deny（實測發現對 repo_root 整個 deny
+    # 會連自己 run_dir 的 Write/Edit 都一起擋掉），所以這層改成靜態列出
+    # 跟 run_dir 不可能重疊的子樹分別擋，不靠 allow 覆蓋 deny。
+    permissions = settings["permissions"]
+    assert f"Read(//{repo_root_abs}/migration/**)" in permissions["deny"]
+    assert f"Edit(//{repo_root_abs}/migration/**)" in permissions["deny"]
+    assert f"Read(//{repo_root_abs}/harness/**)" in permissions["deny"]
+    assert f"Read(//{repo_root_abs}/fixtures/**)" in permissions["deny"]
+    # 既有的 git commit/push、套件安裝 deny 規則（來自 templates/settings.json）
+    # 要保留，不是被新的沙盒規則整份覆蓋掉。
+    assert "Bash(git commit:*)" in permissions["deny"]
+

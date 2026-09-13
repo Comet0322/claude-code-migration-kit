@@ -27,6 +27,91 @@ subagent 的工具名稱不是 `Task`，用實際名稱替換，並在該任務�
 明）。真正的危險操作邊界一律靠 run 自己的 `.claude/settings.json` deny 規
 則擋，這點跟原本的設計精神一致，只是換了允許清單的表達方式。
 
+**Ruling（Task 9 端到端驗收之後，使用者要求，取代原本設計）：**
+`harness/driver.py` 的 `invoke_claude` 改成用 **Claude Agent SDK**
+（Python 套件 `claude-agent-sdk`，`query()` 函式）呼叫，不再用
+`subprocess.run` 打 `claude -p` CLI。原因：SDK 底層本質上還是 spawn 本機
+的 `claude` 執行檔（`_internal/transport/subprocess_cli.py`），所以照樣沿
+用這台機器已登入的訂閱帳號認證，不用另外設定 API key，跟原本 CLI 呼叫方
+式的認證行為一致；改用 SDK 純粹是換一種呼叫介面（結構化的
+`ClaudeAgentOptions`/`ResultMessage`，不用自己組 argv、解析 JSON 字串）。
+對應變動：
+- `allowed_tools` 從逗號分隔字串改成 `list[str]`（`ClaudeAgentOptions.allowed_tools`
+  的型別），`DriverConfig.claude_bin` 欄位拿掉（SDK 用自帶/自動探測的執行
+  檔路徑，不需要呼叫端指定 argv[0]）。
+- 逾時偵測從 `subprocess.run(..., timeout=...)` 換成
+  `asyncio.wait_for(...)`；已用真實 SDK 呼叫（打 `Bash` 工具跑
+  `sleep 30`）驗證過：`wait_for` 逾時取消時，SDK 內部
+  `finally: await inner.aclose()` 會確實終止底層 `claude` 子行程，不會留
+  下孤兒行程。
+- SDK 在最後一輪 `is_error=True` 時是丟 `ResultError`（而不是像舊版 CLI
+  JSON 那樣單純回傳一個 `is_error: true` 欄位），`invoke_claude` 接住這個
+  例外、取出 `.result` 文字後原樣回傳，維持舊版「這裡不判斷對錯、真正該
+  不該繼續由 gates.py 讀檔案狀態決定」的行為不變。
+- 這**打破了**開頭 Global Constraints 的「零外部執行期依賴」——`harness/`
+  現在有一個真正的執行期依賴 `claude-agent-sdk`。用 `uv`
+  （根目錄 `pyproject.toml` + `uv.lock`，`[tool.uv] package = false`）管
+  理這個依賴跟開發期的 `pytest`，`uv sync` 建立 `.venv/`（已在
+  `.gitignore`），跑測試/跑 harness 一律用 `uv run pytest`/`uv run python
+  -m harness.run`，不再假設系統 Python 直接能 `import harness`。
+
+**Ruling（SDK 化之後、Task 9 端到端驗收發現真實污染問題，使用者要求，取
+代原本設計）：** `harness/provisioning.py` 的 `_seed_settings` 從單純複製
+`templates/settings.json`，改成動態產生每個 run 自己的沙盒設定，把 Bash
+跟原生 Read/Edit/Grep/Glob 工具都限制在這次 run 自己的工作目錄裡，不能碰
+到 repo 其他地方。
+
+起因：手動跑 Task 9 的端到端驗收時，`migration-clarify` 用 Bash `cd` 到
+repo 根目錄（不是這次 run 隔離出來的 `runs/<fixture>-<mode>-<timestamp>/`
+目錄），翻到一份之前手動跑過、留在 repo 根目錄 `migration/` 的部門 200
+Delphi 遷移範例，拿它的實作當「先例」推翻自己原本從 domain skill/
+rulebook 推出的決定——這汙染了這次本該獨立判斷的 headless 測試，直接打
+到這個 harness 存在的目的本身（「供事後檢討 domain skill / corp lib /
+rulebook 種子規則的設計品質」，如果 agent 能撿到 repo 裡剛好留著的答案，
+測試就量不到種子規則夠不夠）。
+
+實作分兩層，因為兩層的 allow/deny 語意不一樣（都經過真實 SDK 呼叫驗證，
+不是只看文件猜的）：
+
+1. **Bash（`sandbox.enabled: true`，OS 層級、bubblewrap 實作）**：
+   `denyRead` 整個 repo_root，`allowRead` 只重新打開 `.claude/**`（domain
+   skill 定義）、`vendor/**`（目標端 library 參考原始碼）跟這次 run 自己
+   的工作目錄。這層驗證過**較窄的 allow 真的能蓋過較寬的 deny**（重新打
+   開被 deny 蓋住的一小塊）。
+   - 這台機器本身已經跑在一層不特權容器裡，Ubuntu 24.04+ 預設的
+     AppArmor 政策（`kernel.apparmor_restrict_unprivileged_userns=1`）會
+     擋 bubblewrap 建立它自己需要的 user/network namespace（撞到的錯誤
+     是 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`），
+     這是 Claude Code 官方文件本身就記載的已知案例，解法是由人類
+     （不是 agent，需要 `sudo`）在機器上加一條 AppArmor profile 讓
+     `bwrap` 可以建立 namespace，見官方文件
+     `docs/en/sandboxing#ubuntu-2404-and-later-allow-bubblewrap-to-create-user-namespaces`。
+   - 同時設定 `sandbox.enableWeakerNestedSandbox: true`——外層容器本身已
+     經提供隔離邊界，這裡放寬巢狀沙盒本身的強度，不影響檔案系統
+     allow/deny 判斷邏輯。
+2. **`permissions.deny`（管原生 Read/Edit/Grep/Glob 工具，不經過 Bash，
+   不受 sandbox 管）**：**這層的 deny 永遠贏，較窄的 allow 蓋不過較寬的
+   deny**（實測發現：對整個 repo_root 下 `Read`/`Edit` deny，就算另外加
+   一條只 allow 這次 run_dir 的規則，`Write`/`Edit` 工具連寫自己的
+   run_dir 都會被擋下——`File is in a directory that is denied by your
+   permission settings.`，直接讓 `migration-convert` 沒辦法產出任何檔
+   案）。所以這層改成靜態列出「跟這次 run 的工作目錄結構上不可能重疊」
+   的子樹分別 deny（`migration/`、`fixtures/`、`harness/`、
+   `templates/`、`docs/`、`code-migration-kit-with-claude-code/`），不
+   靠 allow 覆蓋 deny。sibling 的 `runs/<其他 run>/` 沒辦法用這個模型安
+   全擋掉（跟自己的 run_dir 結構上會重疊在同一個 `runs/**` 底下）——這塊
+   只能靠上面的 Bash sandbox 層防護，是刻意的取捨，不是遺漏。
+
+`harness/tests/test_provisioning.py` 補了
+`test_provision_e2e_sandboxes_run_dir_and_keeps_existing_deny_rules` 驗
+證產出的 `settings.json` 內容跟既有 deny 規則有被保留，但**單元測試沒辦
+法驗證沙盒真的擋得住**（沙盒是 Claude Code CLI 本身的行為，不是
+`harness/` 自己的程式邏輯）——這件事是用真的 SDK 呼叫手動驗證的：對一個
+真的 provision 過的 run 目錄下了一組探測 prompt（Bash 讀寫 run_dir 內
+外、原生 Read 工具讀 run_dir 外的檔案），逐項確認「工作目錄內讀寫成功、
+工作目錄外讀寫全被擋、白名單的 `.claude`/`vendor` 讀取正常」都符合預
+期，才判定這個改動可以用。
+
 **Tech Stack:** Python 3（標準庫為主：`subprocess`/`json`/`pathlib`/
 `argparse`/`dataclasses`/`enum`/`shutil`/`csv`），測試用 `pytest`（開發期
 依賴，跑 `pip install pytest` 即可，不影響 migration kit 本身跑在
@@ -39,7 +124,9 @@ air-gapped 環境的假設——這個依賴只給開發這個 harness 用，har
 
 - 零外部執行期依賴：`harness/` 底下的程式只能用 Python 標準庫，不引入
   `pyyaml` 等套件——`test-config` 用 **JSON**（`test-config.json`），不是
-  spec 草稿裡寫的 `.yaml`（純粹格式選擇，內容結構不變）。
+  spec 草稿裡寫的 `.yaml`（純粹格式選擇，內容結構不變）。**（Task 9 之後
+  的 Ruling 打破了這條——`driver.py` 改用 Claude Agent SDK 之後有真正的
+  執行期依賴，見 Architecture 段落的第二個 Ruling，用 `uv` 管理。）**
 - `migration/.headless-test` 標記檔存在時才觸發 headless 自決；標記檔不存
   在時 `migration-clarify` 的行為必須跟修改前逐字一致——這是唯一的行為開
   關依據，不要用環境變數或其他隱性訊號。

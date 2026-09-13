@@ -1,41 +1,83 @@
-import json
+import asyncio
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
+from claude_agent_sdk import ResultError, ResultMessage
 
-from harness.driver import DriverConfig, invoke_claude
+from harness.driver import DriverConfig, DriverTimeoutError, invoke_claude
 from harness.gates import Outcome
 
 
-def test_invoke_claude_builds_command_and_parses_result(monkeypatch, tmp_path: Path):
+def _result_message(result: str, is_error: bool = False) -> ResultMessage:
+    return ResultMessage(
+        subtype="success",
+        duration_ms=1,
+        duration_api_ms=1,
+        is_error=is_error,
+        num_turns=1,
+        session_id="s1",
+        result=result,
+    )
+
+
+def test_invoke_claude_passes_options_and_returns_last_result(monkeypatch, tmp_path: Path):
     captured = {}
 
-    def fake_run(cmd, cwd, capture_output, text, timeout):
-        captured["cmd"] = cmd
-        captured["cwd"] = cwd
-        captured["timeout"] = timeout
-        return SimpleNamespace(
-            stdout=json.dumps({"result": "done", "is_error": False}),
-            stderr="",
-            returncode=0,
-        )
+    async def fake_query(*, prompt, options):
+        captured["prompt"] = prompt
+        captured["options"] = options
+        yield _result_message("done")
 
-    monkeypatch.setattr("harness.driver.subprocess.run", fake_run)
+    monkeypatch.setattr("harness.driver.query", fake_query)
 
     output = invoke_claude(tmp_path, "跑 migration skill", DriverConfig())
 
     assert output == "done"
-    assert captured["cmd"][0] == "claude"
-    assert "-p" in captured["cmd"]
-    assert "跑 migration skill" in captured["cmd"]
-    assert "--output-format" in captured["cmd"]
-    assert "json" in captured["cmd"]
-    assert "--permission-mode" in captured["cmd"]
-    assert "acceptEdits" in captured["cmd"]
-    assert "--allowedTools" in captured["cmd"]
-    assert "Bash,Edit,Write,Read,Glob,Grep,Skill,Task" in captured["cmd"]
-    assert captured["cwd"] == tmp_path
+    assert captured["prompt"] == "跑 migration skill"
+    assert captured["options"].cwd == str(tmp_path)
+    assert captured["options"].permission_mode == "acceptEdits"
+    assert captured["options"].allowed_tools == ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "Skill", "Task"]
+
+
+def test_invoke_claude_uses_last_result_message_when_multiple(monkeypatch, tmp_path: Path):
+    async def fake_query(*, prompt, options):
+        yield _result_message("intermediate")
+        yield _result_message("final")
+
+    monkeypatch.setattr("harness.driver.query", fake_query)
+
+    output = invoke_claude(tmp_path, "prompt", DriverConfig())
+
+    assert output == "final"
+
+
+def test_invoke_claude_recovers_text_from_result_error_without_raising(monkeypatch, tmp_path: Path):
+    # ResultError 是 SDK 對「最終回合 is_error=True」的自然反應（見
+    # ResultMessage.is_error），對應舊版 CLI JSON 輸出裡 is_error 為 true
+    # 的情況——舊版 invoke_claude 從不因此拋例外，只是把當時能拿到的文字
+    # 內容原樣回傳，讓 gates.py 從檔案狀態（不是這段文字）決定下一步。SDK
+    # 化之後維持同樣的行為：接住 ResultError，不讓它往上炸掉整個
+    # run_loop。
+    async def fake_query(*, prompt, options):
+        yield _result_message("partial output before failure")
+        raise ResultError("turn ended in error", data={"result": "partial output before failure"})
+
+    monkeypatch.setattr("harness.driver.query", fake_query)
+
+    output = invoke_claude(tmp_path, "prompt", DriverConfig())
+
+    assert output == "partial output before failure"
+
+
+def test_invoke_claude_raises_driver_timeout_error_instead_of_hanging(monkeypatch, tmp_path: Path):
+    async def fake_query(*, prompt, options):
+        await asyncio.sleep(10)
+        yield _result_message("too late")
+
+    monkeypatch.setattr("harness.driver.query", fake_query)
+
+    with pytest.raises(DriverTimeoutError, match="逾時"):
+        invoke_claude(tmp_path, "prompt", DriverConfig(per_call_timeout_seconds=0.01))
 
 
 from harness.driver import run_loop
@@ -108,17 +150,14 @@ def test_run_loop_stops_at_max_turns(monkeypatch, tmp_path: Path):
 
 def test_run_loop_returns_error_on_timeout_instead_of_crashing(monkeypatch, tmp_path: Path):
     # regression test (found via real end-to-end validation in Task 9): a
-    # single claude -p call that legitimately takes longer than
+    # single claude call that legitimately takes longer than
     # per_call_timeout_seconds (e.g. migration-convert dispatching three
     # subagents per unit) must produce a graceful Outcome.ERROR, not an
-    # uncaught subprocess.TimeoutExpired that crashes the whole harness
-    # process.
-    from harness.driver import DriverTimeoutError
-
+    # uncaught timeout that crashes the whole harness process.
     (tmp_path / "migration").mkdir()
 
     def fake_invoke_that_times_out(run_dir, prompt, config):
-        raise DriverTimeoutError("claude -p 逾時（超過 per_call_timeout_seconds=1800 秒）")
+        raise DriverTimeoutError("claude query() 逾時（超過 per_call_timeout_seconds=1800 秒）")
 
     monkeypatch.setattr("harness.driver.invoke_claude", fake_invoke_that_times_out)
     monkeypatch.setattr("harness.driver.evaluate_gate", lambda state: GateDecision(Outcome.CONTINUE, "unused"))

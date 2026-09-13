@@ -8,3 +8,6 @@ vendor/*/target/
 **/*.egg-info/
 .venv/
 *.sqlite3
+
+# harness 每次執行產生的 run 工作目錄，不是要進版控的產物
+runs/
