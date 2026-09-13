@@ -148,6 +148,71 @@ def test_run_loop_stops_at_max_turns(monkeypatch, tmp_path: Path):
     assert result.turns_used == 3
 
 
+def test_run_loop_rejects_unknown_session_mode(tmp_path: Path):
+    (tmp_path / "migration").mkdir()
+
+    with pytest.raises(ValueError, match="session_mode"):
+        run_loop(tmp_path, "e2e", DriverConfig(session_mode="not-a-real-mode"))
+
+
+class _FakeClient:
+    """單一 session 貫穿整個 run_loop 的假 client，用來驗證 persistent 模式
+    只 connect 一次、之後每輪用同一個 client 重複 query()/receive_response()——
+    不是每輪都重新建立一個新的 _FakeClient。"""
+
+    instances: list["_FakeClient"] = []
+
+    def __init__(self, options=None):
+        self.options = options
+        self.query_calls: list[str] = []
+        self.connected = False
+        self.disconnected = False
+        _FakeClient.instances.append(self)
+
+    async def __aenter__(self):
+        self.connected = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.disconnected = True
+        return False
+
+    async def query(self, prompt: str) -> None:
+        self.query_calls.append(prompt)
+
+    async def receive_response(self):
+        yield _result_message(f"result-{len(self.query_calls)}")
+
+
+def test_run_loop_persistent_reuses_one_client_across_turns(monkeypatch, tmp_path: Path):
+    (tmp_path / "migration").mkdir()
+    _FakeClient.instances = []
+
+    decisions = [
+        GateDecision(Outcome.CONTINUE, "still going"),
+        GateDecision(Outcome.CONTINUE, "still going"),
+        GateDecision(Outcome.SUCCESS, "done"),
+    ]
+
+    monkeypatch.setattr("harness.driver.ClaudeSDKClient", _FakeClient)
+    monkeypatch.setattr("harness.driver.evaluate_gate", lambda state: decisions.pop(0))
+    monkeypatch.setattr("harness.driver.read_run_state", lambda run_dir: object())
+
+    result = run_loop(
+        tmp_path, "e2e",
+        DriverConfig(max_turns=5, max_wallclock_seconds=60, session_mode="persistent"),
+    )
+
+    assert result.outcome == Outcome.SUCCESS
+    assert result.turns_used == 3
+    # 只建立了一個 client（一次 connect），三輪 query() 都打在同一個 client 上
+    assert len(_FakeClient.instances) == 1
+    client = _FakeClient.instances[0]
+    assert client.connected is True
+    assert client.disconnected is True
+    assert len(client.query_calls) == 3
+
+
 def test_run_loop_returns_error_on_timeout_instead_of_crashing(monkeypatch, tmp_path: Path):
     # regression test (found via real end-to-end validation in Task 9): a
     # single claude call that legitimately takes longer than

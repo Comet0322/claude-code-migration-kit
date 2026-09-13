@@ -59,6 +59,46 @@ def test_main_wires_provisioning_driver_and_evaluate(monkeypatch, tmp_path: Path
     assert (tmp_path / "runs" / "fake-run" / "eval-report.md").read_text(encoding="utf-8") == "report text"
 
 
+def test_main_forwards_session_mode_to_driver_config(monkeypatch, tmp_path: Path):
+    captured = {}
+
+    def fake_create_run_dir(fixture_name, mode, runs_root):
+        run_dir = tmp_path / "runs" / "fake-run"
+        run_dir.mkdir(parents=True)
+        (run_dir / "migration").mkdir()
+        return run_dir
+
+    def fake_provision_e2e(fixture_name, run_dir, fixtures_root, repo_root, templates_root, force_domain_skill=None):
+        pass
+
+    def fake_run_loop(run_dir, mode, config):
+        captured["session_mode"] = config.session_mode
+        return DriverResult(Outcome.SUCCESS, 1, "ok", "")
+
+    def fake_read_run_state(run_dir):
+        from harness.state import RunState
+        return RunState(run_dir=run_dir)
+
+    def fake_load_test_config(fixture_name, fixtures_root):
+        return {"expected_outcome": "success", "expected_units": {}}
+
+    monkeypatch.setattr("harness.run.create_run_dir", fake_create_run_dir)
+    monkeypatch.setattr("harness.run.provision_e2e", fake_provision_e2e)
+    monkeypatch.setattr("harness.run.run_loop", fake_run_loop)
+    monkeypatch.setattr("harness.run.read_run_state", fake_read_run_state)
+    monkeypatch.setattr("harness.run.load_test_config", fake_load_test_config)
+    monkeypatch.setattr("harness.run.build_eval_report", lambda *a, **k: "report text")
+    monkeypatch.setattr("harness.run.append_history", lambda *a, **k: None)
+
+    main(["--fixture", "dept200-vb6", "--mode", "e2e", "--session-mode", "persistent",
+          "--fixtures-root", str(tmp_path / "fixtures"),
+          "--templates-root", str(tmp_path / "templates"),
+          "--runs-root", str(tmp_path / "runs"),
+          "--history-path", str(tmp_path / "history.tsv")])
+
+    assert captured["session_mode"] == "persistent"
+
+
 def test_main_forwards_variant_as_force_domain_skill(monkeypatch, tmp_path: Path):
     calls = []
 

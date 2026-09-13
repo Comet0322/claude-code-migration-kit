@@ -73,15 +73,15 @@ Logger.Write evtError, "db timeout", "unit=u456"
 
 這批應用的目標 Python 專案可能是 FastAPI 服務或背景 ETL 批次，兩者擇
 一，由 `migration-clarify` 跟人類確認（見「Decide target project shape」節）：
-- 同 skill `python-template` 的「專案形狀：FastAPI 常駐服務」節
-- 同 skill `python-template` 的「專案形狀：背景 ETL 批次」節
+- 同 skill `python-template` 的「Project shape: FastAPI long-running service」節
+- 同 skill `python-template` 的「Project shape: background ETL batch」節
 
 ## 新語言 library 文件
 
-同 skill `python-template` 的「corplib 使用方式」節。
+同 skill `python-template` 的「Using corplib (DB + Logging)」節。
 
 ## 測試 / build 方法
 
 隨 `migration-clarify` 已確認的模板形狀決定，對應 `python-template` 的
-「測試 / build 方法（FastAPI）」或「測試 / build 方法（ETL 批次）」節
+「Test / build method (FastAPI)」或「Test / build method (ETL batch)」節
 （不再重複貼）。

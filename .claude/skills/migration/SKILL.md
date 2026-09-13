@@ -17,15 +17,31 @@ sub-skill call, respect its own gate rules on whether to stop.
 
 ## Before you start (one-time human repo setup)
 
-`migration-convert` checks `.claude/settings.json` for deny rules blocking
-`git commit`/`git push`/package-install commands before it runs — missing
-rules stop it cold, and it won't create them itself (see `migration-convert`'s
-Red Flags). Not needed during analyze/clarify, so it won't block early, but
-flag it early anyway: copy `.claude/skills/migration/templates/settings.json`
-into the repo's `.claude/settings.json` (or merge the `deny` array into an
-existing one — see `.claude/skills/migration/templates/settings.README.md`
-for details). On a repo's first run, do this while the human is signing off
-the rulebook after `migration-clarify`, not after convert gets stuck on it.
+Copy `.claude/skills/migration/templates/settings.json` into the repo's
+`.claude/settings.json` **and** copy
+`.claude/skills/migration/templates/hooks/` into the repo's `.claude/hooks/`
+(the settings.json's `SubagentStop` hook entry points at that path — a
+cheap `mvn compile`/`ruff check` gate that runs right before
+`migration-translator`/`migration-test-writer` hands its result back) — or
+merge the `hooks` content into an existing settings.json — see
+`.claude/skills/migration/templates/settings.README.md` for details. Not a
+hard prerequisite (nothing checks for it and stops if it's missing — the
+hook is a bonus, not a red line), but do it while the human is signing off
+the rulebook after `migration-clarify`, before `migration-convert` starts,
+so the check is in place from the first pilot unit rather than partway
+through.
+
+Git commit/push and target-side package installs are **never** something
+any agent in this pipeline does on its own — that's enforced entirely at
+the prompt level (each subagent's own instructions, plus
+`migration-convert`'s Red Flags table), not by a `.claude/settings.json`
+deny rule. An earlier version of this kit used a blanket
+`permissions.deny` for this, but a repo-wide deny also blocks anything else
+in that repo the human asks Claude to do — including totally unrelated
+commit/install requests, indefinitely, until someone remembers to remove
+it — which caused more confusion than it prevented. See
+`.claude/skills/migration/templates/settings.README.md` for the full
+reasoning.
 
 ## Scope
 

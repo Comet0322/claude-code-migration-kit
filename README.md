@@ -163,7 +163,14 @@ the most expensive in the pipeline. It runs 9 sections in order:
    `external-refs.tsv` against *both* the domain skill's "private package
    documentation" and its "syntax conversion" table (checking only one
    produces false positives — a package already named in the docs section
-   would otherwise look like an undocumented gap).
+   would otherwise look like an undocumented gap). Every rule added here
+   gets tagged `[repo-specific]` or `[domain-general]` — the latter is a
+   fact about the domain skill's own private package that any app using it
+   would hit, not something specific to this one codebase, and becomes a
+   named candidate in the final report for the human to fold back into the
+   domain skill's own rule table (never done automatically — this is what
+   keeps a domain skill's seed rules from staying frozen at whenever it was
+   first authored).
 5. **Gap inventory** — places where the target language forces an explicit
    decision the source language left implicit (ownership, nullability,
    interface contracts).
@@ -188,9 +195,14 @@ the most expensive in the pipeline. It runs 9 sections in order:
      mid-stream. The human is asked to choose per unit or per batch: trust it
      as-is, verify it without re-converting, or discard and let the kit
      retranslate (with an explicit backup warning).
-8. **Scaffold the target project** — idempotent; never destroys existing
-   work; verifies target-side package installs read-only and stops if
-   they're missing rather than installing them.
+8. **Confirm target-side prerequisites** — verifies target-side package
+   installs read-only and stops if they're missing rather than installing
+   them. This step decides/confirms only — it doesn't build anything;
+   actually scaffolding the target project (directory structure, build
+   config files) is `migration-convert`'s own pre-flight job now (pure
+   mechanical execution of a decision already made here, not a judgment
+   call), and it re-confirms the same package check itself before running,
+   since real time can pass between this step and that call.
 9. **Mark the pilot subset** — 2-3 units (prioritizing `risk_flag: high`)
    get `pilot: yes` as a column on `manifest.tsv` itself, not a separate
    file. This is what conversion runs first, to contain the cost if a rule
@@ -292,7 +304,8 @@ migration/
 ├── analysis/depmap/{edges,order,cycles,external-refs}.tsv|txt   (migration-analyze; never renamed away)
 ├── RULEBOOK.md            # frontmatter: domain_skill, ground_truth_tier,
 │                          #   ground_truth_reason, target_shape?, parity_check?
-│                          # body: translation decisions + deviation log
+│                          # body: translation decisions (tagged
+│                          #   [repo-specific]/[domain-general])
 ├── inventory.tsv          # explicit-decision points (ownership, nullability, ...)
 ├── manifest.tsv           # unit_id, source_path, target_path, cycle_group,
 │                          #   order_index, risk_flag, risk_reason, pilot

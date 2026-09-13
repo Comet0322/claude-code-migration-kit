@@ -206,8 +206,7 @@ agents might make different choices" (backed by data, e.g. "this pattern
 appears N times"), decide them one at a time with the human, and add them to
 `migration/RULEBOOK.md`'s body (section 1 already created a frontmatter-only
 skeleton; this is filling in the body after the frontmatter, not creating a
-new file — keep the Deviation Log section reserved for the conversion stage
-to report into).
+new file).
 
 **Also read `migration/analysis/depmap/external-refs.tsv` as a second
 evidence source**: these are references the analysis stage recorded that
@@ -244,11 +243,19 @@ false alarm. Only when **both** sections miss it is it a real candidate —
 native or private, as long as it meets both "domain skill mentions it in
 neither section" and "not obviously safe to translate" — raise it as a
 candidate with its occurrence count as evidence, decided the same way as
-every other rulebook item: it might be "domain skill missed a rule," or it
-might be "this batch really does have an undocumented private package."
-This isn't a new process, just one more evidence source feeding the same
-"decide them one at a time with the human" discipline — don't spin up a
-separate report or sign-off for this list.
+every other rulebook item (it might be "domain skill missed a rule," or it
+might be "this batch really does have an undocumented private package") — no
+separate report or sign-off needed for this list.
+
+**Tag each new rule you add to the body as `[repo-specific]` or
+`[domain-general]`** — this is a judgment call you make alongside the human
+when deciding the rule, not extra process: `[repo-specific]` means it only
+makes sense because of something particular to this one codebase (a naming
+quirk, a one-off legacy workaround); `[domain-general]` means it's really a
+fact about the domain skill's own private package/library that any app using
+it would hit the same way, this repo just happened to be the first to
+surface it. This tag is what feeds the "Done when" section's list of
+domain-skill-worthy candidates — it isn't just bookkeeping.
 
 The rulebook is read-only for the rest of this session once done — none of
 the three conversion-stage agents may edit it; amendments after this point
@@ -284,8 +291,8 @@ manifest.
 
 Once decided, write it into `migration/RULEBOOK.md` frontmatter's
 `target_shape` field (value: template skill name). This field decides which
-template skeleton section 8's scaffold uses and which template knowledge
-`migration-convert` feeds the three subagents.
+template skeleton `migration-convert` scaffolds the target project from and
+which template knowledge it feeds the three subagents.
 
 If the domain skill's "template project" section only has a single "same as
 skill `<name>`" (no listed options), this target language has no shape
@@ -323,7 +330,7 @@ sitting untouched under `migration/analysis/` — that would turn one set of
 content into two files that need to stay in sync; `units.tsv` shouldn't
 exist anymore once this step is done. Keep `units.tsv`'s existing
 `cycle_group`/`order_index`/`risk_flag`/`risk_reason` columns in
-`manifest.tsv` — the two subsections below and section 9's pilot selection
+`manifest.tsv` — the three subsections below and section 9's pilot selection
 still need them; `migration-convert` only looks at the
 `unit_id`/`source_path`/`target_path` columns it needs, and the extra
 columns don't affect it.
@@ -405,8 +412,8 @@ After filling in `target_path` for every row, additionally check: this
 `target_path` **already has a non-empty file**, and `migration/state/<unit_id>.json`
 **doesn't exist yet** (meaning this kit's own pipeline never touched this
 unit) — a signal that someone put something there manually (or otherwise)
-before this kit ever got involved. Different from what scaffold's "don't
-overwrite what already exists" protects (that protects directory
+before this kit ever got involved. Different from what `migration-convert`'s
+scaffold-building idempotency protects (that protects directory
 structure/build config files, not per-unit code files).
 
 Whether to trust this existing work is a scope decision neither the domain
@@ -441,22 +448,30 @@ whole batch at once, or per unit if they prefer:
 
 Skip this section without asking if no qualifying units are detected.
 
-## 8. Scaffold the target project
+## 8. Confirm target-side prerequisites
 
-Following the template project (same as "copy source locally, fill in
-target_path, produce the full manifest" — if `RULEBOOK.md` frontmatter has a
-`target_shape` field, use the template skill it points to), build out the
-target path's skeleton (directory structure, build config files). Don't
-overwrite what already exists — this step should be idempotent, rerunning it
-must not destroy already-converted work.
+This section decides/confirms, it doesn't build — actually constructing the
+target project's scaffold (directory structure, build config files) is
+`migration-convert`'s job now (its pre-flight checklist), since that's pure
+mechanical execution of what's already decided here, not a judgment call
+that needs your involvement. Don't create any files under `target/` in this
+section.
 
-If the template-project section declares external packages needed on the
-target side: confirm read-only (e.g. `test -d node_modules`, `pip show
-<pkg>`) whether they're already installed. If not, **stop and tell the human
-which install command to run manually** — don't install anything yourself —
-same red line as "how to get ground truth"'s "can't install things
-yourself," just on the target-language side. Rerun this section to confirm
-once the human has installed it.
+What you do here: if the selected template project (same as "copy source
+locally, fill in target_path, produce the full manifest" — if `RULEBOOK.md`
+frontmatter has a `target_shape` field, use the template skill it points to)
+declares external packages needed on the target side, confirm read-only
+(e.g. `test -d node_modules`, `pip show <pkg>`) whether they're already
+installed. If not, **stop and tell the human which install command to run
+manually** — don't install anything yourself — same red line as "how to get
+ground truth"'s "can't install things yourself," just on the target-language
+side. Rerun this section to confirm once the human has installed it. This is
+an early heads-up for the human, not the last check — `migration-convert`
+re-confirms the same thing in its own pre-flight before it actually runs,
+since real time may pass between this step and that call.
+
+Nothing to confirm (purely standard-library target) → nothing to do here,
+move on.
 
 ## 9. Mark the pilot subset
 
@@ -478,15 +493,29 @@ Once all nine sections above are done, **you must always stop**, report the
 full artifact list (`RULEBOOK.md` — including its frontmatter's
 `domain_skill`/`ground_truth_tier`/`ground_truth_reason`/`target_shape` (if
 that section applied)/`parity_check` (if enabled) fields, inventory, mismatch
-report if any, manifest (with its `pilot` column), scaffold status, and the
-list of any detected "pre-existing manual work" units with their decisions).
+report if any, manifest (with its `pilot` column), target-side prerequisite
+status (packages confirmed installed, or what the human still needs to
+install), and the list of any detected "pre-existing manual work" units with
+their decisions).
+
+List every `[domain-general]`-tagged rule from section 4 as its own item,
+naming the domain skill file it's a candidate for (`.claude/skills/<domain
+skill name>/SKILL.md`'s "syntax conversion / library replacement rules"
+table). This is the only place this list surfaces — it isn't written to any
+file, just called out in this report, since deciding whether to actually
+fold a rule into the domain skill is a human judgment made between batches,
+not something this run's artifacts need to track. **You never edit the
+domain skill file yourself, regardless of how confident the tag is** — same
+boundary as the rulebook itself, just on department-owned content instead of
+this repo's own.
+
 Don't auto-proceed to conversion — only after a human reviews these
 decisions does the top-level orchestrator take `manifest.tsv`'s `pilot=yes`
 rows to run `migration-convert`.
 
-Add one reminder to your report: `migration-convert` checks
-`.claude/settings.json` for deny rules before it runs (see `migration`'s
-"before you start" section and `migration-convert`'s Red Flags) — if this is
-the first run on this repo, set it up while the human is signing off, don't
-wait for convert to get stuck on it. You don't check for or create this file
-yourself — this is just a reminder, not your job.
+Add one reminder to your report: if this is the first run on this repo,
+`.claude/settings.json` + `.claude/hooks/` should be copied over now (see
+`migration`'s "before you start" section) so the syntax-check hook is in
+place from the first pilot unit — not a hard prerequisite `migration-convert`
+blocks on, but better done now than partway through. You don't check for or
+create these files yourself — this is just a reminder, not your job.

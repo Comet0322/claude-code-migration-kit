@@ -4,7 +4,8 @@ description: >
   Conversion orchestrator skill: called by the top-level orchestrator once
   clarification and gap analysis are complete, given a manifest path. Do not
   use while migration/ prerequisites (rulebook, inventory, domain-skill
-  selection, target project scaffold) are incomplete.
+  selection) are incomplete — building the target project scaffold itself is
+  this skill's own pre-flight job, not a prerequisite it waits on.
 ---
 
 # Conversion Orchestrator Skill
@@ -44,28 +45,38 @@ pilot to full scope is the caller's sign-off decision, not your logic.
    knowledge to feed the three subagents. A domain skill with only one shape
    (no divergence) doesn't need this field. Missing it → stop, tell the
    human to run `migration-clarify` to decide, don't guess a shape yourself.
-4. The domain skill's described template-project scaffold already exists at
-   the target paths (you're not responsible for generating the scaffold).
+4. Build the target project's scaffold (directory structure, build config
+   files) per the domain skill's template-project section (and `target_shape`
+   if set) — unlike the other pre-flight items, this one you actually do,
+   not just check: `migration-clarify` only confirms/decides target-side
+   prerequisites (see its "confirm target-side prerequisites" section), it
+   never creates files under `target/`. Building the scaffold is pure
+   mechanical execution of what's already decided (target shape + manifest's
+   `target_path` values) — no judgment call needed, so it belongs here, not
+   in clarify. **Idempotent — never overwrite or destroy already-converted
+   work**; if the scaffold already exists (a prior call already built it, or
+   a human built it by hand), leave it alone.
 5. If the domain skill declares target-side packages are needed (see the
    template-project section), confirm read-only they're already installed
    (e.g. `test -d node_modules`, `pip show <pkg>`) — **query only, never
    install**. Not installed → stop and tell the human what to install first
-   — don't run the install command yourself (same red line as item 6, just
-   checking a different thing).
-6. `.claude/settings.json` already has deny rules for `git commit` / `git
-   push` and package-install commands (`brew install`/`pip install`/`npm
-   install`, etc). **Not there → stop, tell the human what rules to add
-   (point them at `.claude/skills/migration/templates/settings.json` +
-   `.claude/skills/migration/templates/settings.README.md`), don't edit
-   settings.json yourself** — this red line can't be routed around for
-   convenience. Even if the Claude Code platform's own self-modification
-   guard happens to block your edit attempt, that's not license to try
-   another way (e.g. writing the file indirectly via a script) — the only
-   correct next step is to stop and let the human edit it, or run the
-   blocked command themselves.
+   — don't run the install command yourself. `migration-clarify` already did
+   this same check once as an early heads-up — this is a re-confirmation,
+   not a duplicate mistake: real time can pass between that step and this
+   call, so don't skip it just because clarify already reported it
+   installed.
 
 Any item incomplete → report what's missing, STOP, don't try to generate it
 or skip it.
+
+Note what's deliberately *not* on this checklist: whether `.claude/settings.json`
+has deny rules blocking `git commit`/`git push`/package installs. It
+doesn't — this kit relies entirely on the rule below (never do these things,
+no exceptions) rather than a technical block, because a repo-wide deny rule
+also blocks the human's own unrelated requests in that same repo (see
+`.claude/skills/migration/templates/settings.README.md`). Nothing technical
+stops you from running `git commit` or `pip install` here — the rule holds
+anyway.
 
 ## Red Flags
 
@@ -74,8 +85,8 @@ around a red line — stop, follow the rule instead:
 
 | Thought | Reality |
 |---|---|
-| "This is just test/setup work, it doesn't really count as routing around it" | No "this time is just a test so it doesn't count" exception — this exact rule exists because it really happened: someone created `.claude/settings.json` themselves just to get a test running. Never install packages, never edit `settings.json`, in any situation. |
-| "It's blocked, so I'll just route around it another way (a script, writing the file indirectly)" | A deny block is the design working, not a puzzle to solve around it — even the platform's own self-modification guard blocking an edit attempt isn't license to route around it; the correct response is always to stop and let the human decide, not find another path. |
+| "This is just test/setup work, it doesn't really count" | No "this time is just a test so it doesn't count" exception — this exact rule exists because it really happened: someone created `.claude/settings.json` themselves just to get a test running. Never install packages, never commit/push, never edit `settings.json`, in any situation — this holds regardless of whether anything technically stops you; there's no deny rule backing this up, the rule is the only thing standing between you and doing it. |
+| "Nothing's technically stopping me, so it's fine this once" | The absence of a `.claude/settings.json` deny rule for `git commit`/package installs is deliberate (see `migration-convert`'s pre-flight note and `settings.README.md`), not an oversight to exploit — the rule was always meant to hold on its own, a technical block was never the actual mechanism keeping it. |
 | "We'll need to install it eventually, might as well now" | Deciding what to install and when is the human's call, not an efficiency question — you're saving yourself trouble, not making a decision that's yours to make. |
 | "The prerequisites are probably fine, let's just try running it" | Stop for whatever's missing on the pre-flight checklist regardless — "probably fine" doesn't substitute for "confirmed." |
 | "This unit looks like it's already fixed by a recent rule change, let's retry" | Without a human explicitly resetting the status to `pending`, this unit stays failed forever — it never retries itself. |
@@ -102,12 +113,21 @@ them in the final burndown. This is deliberate: otherwise every time you're
 called again, permanently-failed units would get rerun (spending another
 round of three-agent cost) even though the human hasn't fixed anything.
 
-`excluded` is the only terminal state **not produced by you** — `migration-clarify`
-writes it directly while completing the manifest (this unit is the private
-package's own implementation, already replaced by a target-side library;
-only the units calling it need conversion). You don't decide which units
-should be `excluded`, and you never mark one yourself — treat it like any
-other terminal state and skip it.
+Two terminal states are **not produced by you** — `migration-clarify` writes
+both directly while completing the manifest, and you just treat them like
+any other terminal state and skip them:
+- `excluded` — this unit is the private package's own implementation,
+  already replaced by a target-side library; only the units calling it need
+  conversion.
+- `pass` for a unit clarify's "identify pre-existing manual work" section
+  marked trust-as-is — never went through this kit's tests/review at all
+  (`last_note` says so explicitly). **Report these separately from normal
+  pipeline passes in the final burndown** — a pass that skipped verification
+  entirely has different confidence than one the three-agent loop actually
+  produced, and the human needs to see that distinction, not a merged count.
+
+You don't decide which units get either of these, and you never mark one
+yourself.
 
 **For a human to retry a terminal-state unit**, they explicitly reset its
 state file to `status: "pending"` with `attempts` zeroed (a fresh full retry
@@ -157,8 +177,12 @@ asks for it), for every unit with `status: pending`:
    an agent. No such marker → run the normal three steps.
 
 1. **Call `migration-test-writer`**, giving it `unit_id`, `source_path`, the
-   relevant inventory rows, and the domain skill's test-framework
-   conventions. Get back a test file path plus behavior-observation notes.
+   relevant inventory rows, `migration/RULEBOOK.md` frontmatter's
+   `ground_truth_tier`/`ground_truth_reason` fields (it branches its whole
+   method on this — withholding it isn't optional context, it's a required
+   input), and the domain skill's test-framework conventions, test/build
+   method, and where the template project expects test files to live. Get
+   back a test file path plus behavior-observation notes.
 2. **Call `migration-translator`** (skipped for units flagged in step 0),
    giving it `source_path`, `target_path`, the rulebook, relevant inventory
    rows, the domain skill's conversion rules, and the test file path
@@ -319,6 +343,11 @@ integration-check result (if it ran) and `parity_status` (`pass`/`fail`/
 List `excluded` as its own line, never folded into failure counts, and never
 omitted — it's not a failure, it's "this unit never needed conversion,"
 and the human needs to see it was explicitly accounted for, not lost.
+Within `pass`, break out units whose `last_note` is exactly "manually
+pre-completed, human confirmed keep, never went through this kit's
+tests/review" as their own line, separate from the normal-pipeline pass
+count — same reasoning as `excluded`, a different confidence level the
+human needs to see, not silently merged into "pass."
 Attach `migration/cost-log.tsv`'s totals too (total tokens, total time,
 subtotals per agent role) — this is what the human uses to decide "given
 what this pilot cost, roughly how much would the full batch cost." Remind

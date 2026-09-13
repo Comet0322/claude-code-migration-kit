@@ -29,6 +29,19 @@ def main(argv: list[str] | None = None) -> int:
             " 本來就跳過 domain-skill 選定，這個參數沒有意義）"
         ),
     )
+    parser.add_argument(
+        "--session-mode",
+        choices=["fresh", "persistent"],
+        default="fresh",
+        help=(
+            "fresh（預設）：每輪重新起一個全新 session，兩輪之間不帶任何"
+            " 對話記憶——同時也在驗證 migration skill「狀態只活在檔案裡」"
+            " 的設計原則。persistent：整個 run_loop 共用同一個 session，"
+            " 省掉每輪重開 process 的成本、跑得快很多，但也讓上面那條驗證"
+            " 失去意義，只適合想快速看結果、不在意這條原則有沒有被驗到的"
+            " 場合（見 harness/driver.py 的說明）。"
+        ),
+    )
     parser.add_argument("--fixtures-root", default="fixtures")
     parser.add_argument("--templates-root", default=".claude/skills/migration/templates")
     parser.add_argument("--runs-root", default="runs")
@@ -67,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         max_turns=args.max_turns,
         max_wallclock_seconds=args.max_wallclock_seconds,
         per_call_timeout_seconds=args.per_call_timeout_seconds,
+        session_mode=args.session_mode,
     )
     result = run_loop(run_dir, args.mode, config)
 

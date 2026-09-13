@@ -42,6 +42,36 @@ def test_provision_e2e_copies_legacy_seeds_settings_and_writes_marker(tmp_path: 
     assert (run_dir / "migration" / ".headless-test").exists()
 
 
+def test_provision_e2e_copies_hooks_dir_into_run_claude_dir(tmp_path: Path):
+    fixtures_root = tmp_path / "fixtures"
+    templates_root = tmp_path / "templates"
+    _make_fixture(fixtures_root, "dept200-vb6")
+    _make_templates(templates_root)
+    (templates_root / "hooks").mkdir(parents=True)
+    (templates_root / "hooks" / "syntax-check.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    run_dir = tmp_path / "runs" / "run1"
+    run_dir.mkdir(parents=True)
+
+    provision_e2e("dept200-vb6", run_dir, fixtures_root, tmp_path, templates_root)
+
+    copied = run_dir / ".claude" / "hooks" / "syntax-check.sh"
+    assert copied.exists()
+    assert copied.read_text(encoding="utf-8") == "#!/bin/bash\nexit 0\n"
+
+
+def test_provision_e2e_skips_hooks_copy_when_templates_have_none(tmp_path: Path):
+    fixtures_root = tmp_path / "fixtures"
+    templates_root = tmp_path / "templates"
+    _make_fixture(fixtures_root, "dept200-vb6")
+    _make_templates(templates_root)
+    run_dir = tmp_path / "runs" / "run1"
+    run_dir.mkdir(parents=True)
+
+    provision_e2e("dept200-vb6", run_dir, fixtures_root, tmp_path, templates_root)
+
+    assert not (run_dir / ".claude" / "hooks").exists()
+
+
 def test_provision_e2e_writes_force_domain_skill_marker_when_given(tmp_path: Path):
     fixtures_root = tmp_path / "fixtures"
     templates_root = tmp_path / "templates"
@@ -82,6 +112,8 @@ def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Pat
     (golden_dir / "manifest.tsv").write_text("UserSync\tlegacy/UserSync.bas\ttarget/user_sync.py\n", encoding="utf-8")
     (golden_dir / "RULEBOOK.md").write_text("# rules\n", encoding="utf-8")
     _make_templates(templates_root)
+    (templates_root / "hooks").mkdir(parents=True)
+    (templates_root / "hooks" / "syntax-check.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
     run_dir = tmp_path / "runs" / "run2"
     run_dir.mkdir(parents=True)
 
@@ -89,6 +121,9 @@ def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Pat
 
     assert (run_dir / "migration" / "manifest.tsv").exists()
     assert (run_dir / "migration" / "RULEBOOK.md").exists()
+    # convert-only 也會叫到 migration-translator/migration-test-writer，
+    # SubagentStop hook 一樣要就位，不是只有 e2e 模式需要。
+    assert (run_dir / ".claude" / "hooks" / "syntax-check.sh").exists()
     assert not (run_dir / "migration" / ".headless-test").exists()
 
 
@@ -133,8 +168,11 @@ def test_provision_e2e_sandboxes_run_dir_and_keeps_existing_deny_rules(tmp_path:
     assert f"Edit(//{repo_root_abs}/migration/**)" in permissions["deny"]
     assert f"Read(//{repo_root_abs}/harness/**)" in permissions["deny"]
     assert f"Read(//{repo_root_abs}/fixtures/**)" in permissions["deny"]
-    # 既有的 git commit/push、套件安裝 deny 規則（來自
-    # .claude/skills/migration/templates/settings.json）要保留，不是被
-    # 新的沙盒規則整份覆蓋掉。
+    # `_seed_settings` 合併沙盒規則時，template 裡任何既有的 deny 規則都
+    # 要保留、不能被沙盒新增的規則整份覆蓋掉——這裡塞一條合成的
+    # `Bash(git commit:*)` 純粹是測這條合併邏輯本身，不代表真正的
+    # `.claude/skills/migration/templates/settings.json` 現在真的有這條規
+    # 則（那份 template 現在完全沒有 `permissions.deny`，git commit/push/
+    # 套件安裝改成純 prompt 層級紀律，見 settings.README.md）。
     assert "Bash(git commit:*)" in permissions["deny"]
 

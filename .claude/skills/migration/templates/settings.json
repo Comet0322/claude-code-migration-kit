@@ -1,16 +1,16 @@
 {
-  "permissions": {
-    "deny": [
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(brew install:*)",
-      "Bash(pip install:*)",
-      "Bash(pip3 install:*)",
-      "Bash(npm install:*)",
-      "Bash(npm ci:*)",
-      "Bash(yarn add:*)",
-      "Bash(mvn install:*)",
-      "Bash(gem install:*)"
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "migration-translator|migration-test-writer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/syntax-check.sh",
+            "timeout": 60
+          }
+        ]
+      }
     ]
   }
 }

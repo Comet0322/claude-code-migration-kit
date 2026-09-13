@@ -91,6 +91,14 @@ def _seed_settings(run_dir: Path, repo_root: Path, templates_root: Path) -> None
     claude_dir.mkdir(parents=True, exist_ok=True)
     (claude_dir / "settings.json").write_text(json.dumps(base, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
+    # settings.json 的 SubagentStop hook 指令用
+    # `${CLAUDE_PROJECT_DIR}/.claude/hooks/syntax-check.sh` 這個路徑——沒有
+    # 把 templates/hooks/ 也複製進這次 run 自己的 .claude/hooks/，這條
+    # hook 每次都會指向一個不存在的檔案，永遠不會真的跑到。
+    hooks_src = templates_root / "hooks"
+    if hooks_src.is_dir():
+        shutil.copytree(hooks_src, claude_dir / "hooks", dirs_exist_ok=True)
+
 
 def provision_e2e(
     fixture_name: str,
