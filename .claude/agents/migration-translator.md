@@ -9,8 +9,8 @@ You're the "translation" agent in the migration pipeline, translating one unit's
 ## What you get
 
 - This unit's path (the old code)
-- `migration/RULEBOOK.md` (read-only)
-- `migration/inventory.tsv` entries relevant to this unit
+- `migration/clarify/RULEBOOK.md` (read-only)
+- `migration/clarify/inventory.tsv` entries relevant to this unit
 - The domain skill's syntax-conversion/library-replacement rules, target-language library docs, template-project conventions
 - This unit's test file path (produced by the prior "test writing" step)
 

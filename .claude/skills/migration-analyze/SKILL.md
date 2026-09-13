@@ -68,33 +68,74 @@ one `unit_id` in `units.tsv` (converted, tested, and reviewed together),
 tagged with the same `cycle_group` value — the only way topological order
 still holds when cycles exist.
 
+## Risk assessment: split across parallel migration-risk-scanner subagents
+
+Once the script's output gives you the unit list (one row per file, or per
+merged cycle-group), reading every unit's actual source to judge
+`risk_flag`/`risk_reason` yourself in one context doesn't scale — a real
+batch can be dozens to hundreds of files, and holding all of it in one
+context defeats the point of chunking the work at all. Instead:
+
+1. **Chunk the unit list, never splitting a `cycle_group` across chunks** —
+   a cycle group's units are already treated as one atomic thing downstream
+   (converted/tested/reviewed together), so they need to be read together
+   here too, not split across two scanners that each only see half the
+   picture. Size chunks so each one is comfortably readable in one pass — a
+   rough guideline is "a handful of files," not a fixed count; a small batch
+   might be one chunk, a large one might be a dozen.
+2. **Dispatch one `migration-risk-scanner` subagent per chunk, in parallel**
+   — send all the Task calls together, not one at a time waiting for each
+   to finish before starting the next. Give each one only its own chunk's
+   `unit_id`/`source_path`(s)/`cycle_group` — it doesn't need the rest of
+   the batch.
+3. Specify a model explicitly for every dispatch (mid-tier is enough — this
+   is mechanical read-and-summarize work, not a judgment call requiring the
+   strongest available model) — same "never let it inherit the caller's
+   model" discipline as `migration-convert`'s subagent dispatches.
+4. Merge every scanner's returned rows into `units.tsv`'s `risk_flag`/
+   `risk_reason` columns, and keep the one-line summaries for
+   `migration/analysis/ANALYSIS.md` below. If a scanner reports a source
+   file it couldn't read, don't guess a risk assessment for that unit
+   yourself — carry the "couldn't read" note into both outputs so a human
+   sees it, same as any other gap.
+
 ## Output
 
-One table: `migration/analysis/units.tsv` — columns `unit_id, source_path,
-cycle_group, order_index, risk_flag, risk_reason`, in topological order
-(`order_index` can be left blank and inferred from row order; writing it out
-just makes the number visible without anyone having to count rows).
+Two artifacts, both under `migration/analysis/`:
 
-The three column groups map to script-computed facts plus your own risk
-judgment — not three unrelated artifacts bolted together:
-`unit_id`/`source_path`/`cycle_group`/`order_index` come directly from
-`edges.tsv`/`order.txt`/`cycles.txt`; `risk_flag` (`high`/`normal`) and
-`risk_reason` are your own judgment (basis: abnormal file size/complexity,
-abnormally high fan-out, syntax the analysis script couldn't fully parse),
-not script output. `risk_flag` later drives `migration-clarify`'s pilot-subset
-selection (prioritize `high`-flagged units for the pilot).
+- **`migration/analysis/units.tsv`** — columns `unit_id, source_path,
+  cycle_group, order_index, risk_flag, risk_reason`, in topological order
+  (`order_index` can be left blank and inferred from row order; writing it
+  out just makes the number visible without anyone having to count rows).
+  The three column groups map to script-computed facts plus the scanners'
+  risk judgment — not three unrelated artifacts bolted together:
+  `unit_id`/`source_path`/`cycle_group`/`order_index` come directly from
+  `edges.tsv`/`order.txt`/`cycles.txt`; `risk_flag` (`high`/`normal`) and
+  `risk_reason` come from the `migration-risk-scanner` dispatches above, not
+  from you eyeballing the code yourself. `risk_flag` later drives
+  `migration-clarify`'s pilot-subset selection (prioritize `high`-flagged
+  units for the pilot).
+- **`migration/analysis/ANALYSIS.md`** — a human-readable summary, for
+  someone orienting themselves without wanting to parse four `.tsv`/`.txt`
+  files: total unit count, cycle-group count and which units are in each
+  cycle, high-risk units with their `risk_reason` up front, the most
+  frequently occurring `external-refs.tsv` entries (a preview of what
+  `migration-clarify` will need to classify, not a classification itself —
+  that's still not this step's call), and every unit's one-line summary
+  from its `migration-risk-scanner` (grouped by risk level, high first, so
+  the parts most worth a human's attention aren't buried at the bottom).
 
 ## Boundaries
 
 Read-only. Don't touch the rulebook, inventory, or domain-skill selection;
-don't write any unit's code; don't produce the final `migration/manifest.tsv`
+don't write any unit's code; don't produce the final `migration/clarify/manifest.tsv`
 (that needs `target_path`, which is `migration-clarify`'s job).
 
 ## Done when
 
-Stop once the three `migration/analysis/depmap/` intermediate files and
-`units.tsv` all exist; report a summary (unit count, cycle-group count,
-high-risk unit count). Read-only and rerunnable — the top-level orchestrator
-can go straight to `migration-clarify` without human sign-off, unless the
-scale or complexity of cycles is unusual enough that you judge a human should
-look first.
+Stop once the three `migration/analysis/depmap/` intermediate files,
+`units.tsv`, and `migration/analysis/ANALYSIS.md` all exist; report a
+summary (unit count, cycle-group count, high-risk unit count). Read-only and
+rerunnable — the top-level orchestrator can go straight to
+`migration-clarify` without human sign-off, unless the scale or complexity
+of cycles is unusual enough that you judge a human should look first.

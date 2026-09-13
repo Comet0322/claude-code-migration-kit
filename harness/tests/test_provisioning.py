@@ -39,7 +39,7 @@ def test_provision_e2e_copies_legacy_seeds_settings_and_writes_marker(tmp_path: 
 
     assert (run_dir / "legacy" / "UserSync.bas").exists()
     assert (run_dir / ".claude" / "settings.json").exists()
-    assert (run_dir / "migration" / ".headless-test").exists()
+    assert (run_dir / "migration" / "clarify" / ".headless-test").exists()
 
 
 def test_provision_e2e_copies_hooks_dir_into_run_claude_dir(tmp_path: Path):
@@ -85,7 +85,7 @@ def test_provision_e2e_writes_force_domain_skill_marker_when_given(tmp_path: Pat
         force_domain_skill="domain-200-delphi-java",
     )
 
-    marker = run_dir / "migration" / ".headless-test-domain-skill"
+    marker = run_dir / "migration" / "clarify" / ".headless-test-domain-skill"
     assert marker.exists()
     assert marker.read_text(encoding="utf-8").strip() == "domain-200-delphi-java"
 
@@ -100,7 +100,7 @@ def test_provision_e2e_omits_force_domain_skill_marker_by_default(tmp_path: Path
 
     provision_e2e("dept200-vb6", run_dir, fixtures_root, tmp_path, templates_root)
 
-    assert not (run_dir / "migration" / ".headless-test-domain-skill").exists()
+    assert not (run_dir / "migration" / "clarify" / ".headless-test-domain-skill").exists()
 
 
 def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Path):
@@ -108,9 +108,14 @@ def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Pat
     templates_root = tmp_path / "templates"
     fixture_dir = _make_fixture(fixtures_root, "dept200-vb6")
     golden_dir = fixture_dir / "golden-convert-input"
-    golden_dir.mkdir()
-    (golden_dir / "manifest.tsv").write_text("UserSync\tlegacy/UserSync.bas\ttarget/user_sync.py\n", encoding="utf-8")
-    (golden_dir / "RULEBOOK.md").write_text("# rules\n", encoding="utf-8")
+    # golden-convert-input 底下的目錄結構本身就要已經是 migration/ 的新
+    # 巢狀分層（clarify/、convert/ ...），provision_convert_only 只是原樣
+    # copytree 過去，不做任何路徑轉換。
+    (golden_dir / "clarify").mkdir(parents=True)
+    (golden_dir / "clarify" / "manifest.tsv").write_text(
+        "UserSync\tlegacy/UserSync.bas\ttarget/user_sync.py\n", encoding="utf-8"
+    )
+    (golden_dir / "clarify" / "RULEBOOK.md").write_text("# rules\n", encoding="utf-8")
     _make_templates(templates_root)
     (templates_root / "hooks").mkdir(parents=True)
     (templates_root / "hooks" / "syntax-check.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
@@ -119,12 +124,12 @@ def test_provision_convert_only_copies_golden_input_without_marker(tmp_path: Pat
 
     provision_convert_only("dept200-vb6", run_dir, fixtures_root, tmp_path, templates_root)
 
-    assert (run_dir / "migration" / "manifest.tsv").exists()
-    assert (run_dir / "migration" / "RULEBOOK.md").exists()
+    assert (run_dir / "migration" / "clarify" / "manifest.tsv").exists()
+    assert (run_dir / "migration" / "clarify" / "RULEBOOK.md").exists()
     # convert-only 也會叫到 migration-translator/migration-test-writer，
     # SubagentStop hook 一樣要就位，不是只有 e2e 模式需要。
     assert (run_dir / ".claude" / "hooks" / "syntax-check.sh").exists()
-    assert not (run_dir / "migration" / ".headless-test").exists()
+    assert not (run_dir / "migration" / "clarify" / ".headless-test").exists()
 
 
 def test_provision_e2e_sandboxes_run_dir_and_keeps_existing_deny_rules(tmp_path: Path):

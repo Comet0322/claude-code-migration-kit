@@ -112,8 +112,9 @@ def provision_e2e(
     shutil.copytree(fixture_dir / "legacy", run_dir / "legacy")
     _seed_settings(run_dir, repo_root, templates_root)
     migration_dir = run_dir / "migration"
-    migration_dir.mkdir(parents=True, exist_ok=True)
-    (migration_dir / ".headless-test").write_text("", encoding="utf-8")
+    clarify_dir = migration_dir / "clarify"
+    clarify_dir.mkdir(parents=True, exist_ok=True)
+    (clarify_dir / ".headless-test").write_text("", encoding="utf-8")
     # 只用來讓 fixture 對「fingerprint 本來就設計成模糊」的來源（例如
     # dept200-delphi 同時對得上 domain-200-delphi-java/-python）強制指定
     # 要選哪個 domain skill，藉此讓那個 domain skill 的完整轉換流程也能被
@@ -121,7 +122,7 @@ def provision_e2e(
     # migration-clarify 的 Headless test protocol 段落。真實遷移不會有這
     # 個檔案。
     if force_domain_skill:
-        (migration_dir / ".headless-test-domain-skill").write_text(
+        (clarify_dir / ".headless-test-domain-skill").write_text(
             force_domain_skill + "\n", encoding="utf-8"
         )
 

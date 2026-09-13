@@ -36,7 +36,7 @@ by each department, not by you.
   assumed to rationalize their way around a rule under pressure ("it's just
   a test," "we'll need it eventually") — see each skill's "Red Flags" table.
 - **Every artifact has exactly one owner and one purpose.** `units.tsv` is
-  renamed in place to `manifest.tsv` rather than existing as two files kept
+  renamed and moved to `manifest.tsv` rather than existing as two files kept
   in sync; `RULEBOOK.md`'s YAML frontmatter is the single decision record
   (`domain_skill`, `ground_truth_tier`, `target_shape`, `parity_check`)
   instead of several small decision files. If two files would always need to
@@ -88,8 +88,9 @@ durable, unambiguous file signal:
 
 1. `migration/analysis/depmap/order.txt` missing → call `migration-analyze`.
    (Deliberately checks this file, not `units.tsv`/`manifest.tsv` — those get
-   renamed away by later steps. `depmap/` is the one output nothing downstream
-   ever consumes or renames, making it the correct "has analysis run" signal.)
+   renamed and moved away to `migration/clarify/manifest.tsv` by later steps.
+   `depmap/` is the one output nothing downstream ever consumes or renames,
+   making it the correct "has analysis run" signal.)
 2. Rulebook or manifest incomplete → call `migration-clarify`. **Always stops
    for human sign-off afterward** — the router never decides "looks fine" on
    its behalf.
@@ -124,10 +125,20 @@ agent eyeball the code:
   before conversion starts, not as a mid-conversion surprise.
 - Cyclic dependencies are never broken by judgment — every file in a cycle is
   merged into one `unit_id` (converted/tested/reviewed together).
-- Final output: `units.tsv` (`unit_id, source_path, cycle_group, order_index,
-  risk_flag, risk_reason`). No `target_path` yet — target-side naming
-  conventions come from the domain skill, which isn't selected until the next
-  step, so this step structurally cannot decide where things go.
+- **Risk assessment is parallelized**: rather than one context reading every
+  unit's source serially, the unit list is chunked (never splitting a
+  `cycle_group` across chunks) and one `migration-risk-scanner` subagent
+  (read-only, mid-tier model) is dispatched per chunk, in parallel — each
+  reads only its own chunk's source and returns a `risk_flag`/`risk_reason`
+  plus a one-line summary per unit, keeping any single context from having
+  to hold the whole batch's source at once.
+- Output: `units.tsv` (`unit_id, source_path, cycle_group, order_index,
+  risk_flag, risk_reason`) — no `target_path` yet, target-side naming
+  conventions come from the domain skill, which isn't selected until the
+  next step — plus `migration/analysis/ANALYSIS.md`, a human-readable
+  summary (unit/cycle counts, high-risk units surfaced first, frequent
+  `external-refs.tsv` entries, every scanner's one-line summaries) for
+  orienting without parsing four `.tsv`/`.txt` files by hand.
 
 ### `migration-clarify` — the heaviest step
 
@@ -150,7 +161,7 @@ the most expensive in the pipeline. It runs 9 sections in order:
    - `environment` — a real runtime for the old language exists; the exact
      invocation is recorded in the rulebook.
    - `snapshot` — no runtime, but the human supplies input/output examples,
-     stored under `migration/behavior-snapshots/`.
+     stored under `migration/clarify/behavior-snapshots/`.
    - `inference` — neither available; requires an explicit, dated
      risk-acceptance from the human, recorded in the rulebook. This tier
      disables both judge cross-checking and the optional parity check later.
@@ -181,8 +192,9 @@ the most expensive in the pipeline. It runs 9 sections in order:
    copies every unit's source into this migration's own `legacy/` directory
    so the whole working tree becomes self-contained (movable, archivable,
    independent of the original source repo's continued existence), then
-   renames `units.tsv` **in place** to `manifest.tsv` once `target_path` is
-   filled. Three detection passes happen here:
+   renames and moves `units.tsv` from `migration/analysis/` to
+   `migration/clarify/manifest.tsv` once `target_path` is filled. Three
+   detection passes happen here:
    - **Private-package-itself units** → marked `excluded` (the target side
      already has a replacement library; only calling units need conversion).
    - **UI/presentation-layer units** → always a human scope decision, never
@@ -257,7 +269,7 @@ twice — surviving one retry and still failing usually means the model can't
 see its own mistake). A rule-gap category that recurs 3+ times **pauses**
 that whole category rather than continuing to force a translation the
 rulebook doesn't actually cover, and gets appended to
-`migration/rulebook-amendments.md` for a human to resolve between batches.
+`migration/convert/rulebook-amendments.md` for a human to resolve between batches.
 Only an explicit human reset of a unit's `state/<unit_id>.json` back to
 `pending` ever triggers a retry — nothing in the pipeline decides "this looks
 fixed now, let's try again" on its own.
@@ -289,35 +301,69 @@ one-time observation," a class of error a self-report alone can't surface.
   trustworthiness rests on the human who supplied it). A failure never
   auto-retries; it's reported for a human to route back to a specific unit.
 
-Every subagent call, pass or fail, is logged to `migration/cost-log.tsv`
+Every subagent call, pass or fail, is logged to `migration/convert/cost-log.tsv`
 (tokens, tool uses, duration, outcome) — this is what lets a human decide,
 after a pilot run, whether the full batch is worth the projected cost.
 
 ## State and artifacts
 
-Everything is file-based, under a single `migration/` working directory per
-repo (a batch of "same kind" legacy apps is normally many separate
-repos/checkouts, each with its own `migration/`, not one shared directory):
+Everything is file-based, under a single working root per repo (a batch of
+"same kind" legacy apps is normally many separate repos/checkouts, each with
+its own working root, not one shared directory). That root has three
+siblings — `migration/` (bookkeeping), `legacy/` (copied-in source, so the
+whole root is self-contained and doesn't depend on the original source repo
+staying put), and `target/` (the actual deliverable — the converted
+application; lives outside `migration/` since it's the product, not
+bookkeeping about producing it):
 
 ```
-migration/
-├── analysis/depmap/{edges,order,cycles,external-refs}.tsv|txt   (migration-analyze; never renamed away)
-├── RULEBOOK.md            # frontmatter: domain_skill, ground_truth_tier,
-│                          #   ground_truth_reason, target_shape?, parity_check?
-│                          # body: translation decisions (tagged
-│                          #   [repo-specific]/[domain-general])
-├── inventory.tsv          # explicit-decision points (ownership, nullability, ...)
-├── manifest.tsv           # unit_id, source_path, target_path, cycle_group,
-│                          #   order_index, risk_flag, risk_reason, pilot
-├── behavior-snapshots/    # human-supplied I/O examples (ground_truth_tier: snapshot)
-├── legacy/                # copied-in source, so this directory is self-contained
-├── state/<unit_id>.json   # {status, attempts:{test_writer,translator,reviewer}, last_note}
-├── state/_integration.json  # {status, note, parity_status?, parity_note?}
-├── cost-log.tsv           # timestamp, unit_id, agent, attempt, tokens, tool_uses, duration_ms, outcome
-├── deviation-log.tsv      # rule-gap occurrences, by category
-├── rulebook-amendments.md # pending human decisions once a category hits 3+ occurrences
-└── pilot-signoff.txt      # written only by a human, never by the skill itself
+<working root>/
+├── legacy/                # copied-in source (migration-clarify step 7)
+├── target/                # the actual converted application (the deliverable)
+└── migration/             # everything here is a record/decision/state about
+    │                       #   the migration, never code itself
+    ├── CLAUDE.md              # human-readable resume/orientation summary, kept
+    │                          #   current by the `migration` skill; never a
+    │                          #   source of truth (see "Session continuity")
+    ├── analysis/
+    │   ├── depmap/{edges,order,cycles,external-refs}.tsv|txt   (migration-analyze; never renamed away)
+    │   └── ANALYSIS.md       # human-readable analysis summary (see migration-analyze)
+    ├── clarify/
+    │   ├── RULEBOOK.md          # frontmatter: domain_skill, ground_truth_tier,
+    │   │                        #   ground_truth_reason, target_shape?, parity_check?
+    │   │                        # body: translation decisions (tagged
+    │   │                        #   [repo-specific]/[domain-general])
+    │   ├── inventory.tsv        # explicit-decision points (ownership, nullability, ...)
+    │   ├── manifest.tsv         # unit_id, source_path, target_path, cycle_group,
+    │   │                        #   order_index, risk_flag, risk_reason, pilot
+    │   │                        #   (renamed/moved here from analysis/units.tsv)
+    │   ├── behavior-snapshots/  # human-supplied I/O examples (ground_truth_tier: snapshot)
+    │   ├── .headless-test, .headless-test-domain-skill  # test-harness-only markers
+    │   └── decision-log.md      # headless-test mode only
+    └── convert/
+        ├── state/<unit_id>.json     # {status, attempts:{test_writer,translator,reviewer}, last_note}
+        ├── state/_integration.json  # {status, note, parity_status?, parity_note?}
+        ├── cost-log.tsv              # timestamp, unit_id, agent, attempt, tokens, tool_uses, duration_ms, outcome
+        ├── deviation-log.tsv         # rule-gap occurrences, by category
+        ├── rulebook-amendments.md    # pending human decisions once a category hits 3+ occurrences
+        └── pilot-signoff.txt         # written only by a human, never by the skill itself
 ```
+
+## Session continuity
+
+`migration/CLAUDE.md` (created from `.claude/skills/migration/templates/CLAUDE.md`
+on the `migration` skill's first call on a repo) is a human-readable
+resume/orientation summary — current status, decisions made so far, an
+artifact map, open items — kept refreshed by the `migration` skill right
+before every routing STOP point. It is deliberately **not** a source of
+truth: every routing decision still comes from reading the real files
+directly, same as always; this file exists purely so a human (or a fresh
+session) picking this migration back up doesn't have to re-read every
+artifact to get oriented. A pointer line gets added to the repo's root
+`CLAUDE.md` too (created if missing, appended to if it already exists for
+unrelated reasons — never overwritten), so Claude Code surfaces the
+in-progress migration automatically at the start of any session in that
+repo.
 
 ## Boundary with domain skills
 
@@ -341,9 +387,9 @@ domain skill.
 fixtures under `fixtures/` (simulated department 200 Delphi/VB6 and
 department 300 VB6 legacy apps), using the Claude Agent SDK, for regression
 testing this kit's own skill/agent prompts without a human in the loop
-(`migration/.headless-test` marker makes `migration-clarify` pick its own
-best answer instead of calling `AskUserQuestion`, logging its reasoning to
-`migration/decision-log.md` instead of stopping).
+(`migration/clarify/.headless-test` marker makes `migration-clarify` pick its
+own best answer instead of calling `AskUserQuestion`, logging its reasoning to
+`migration/clarify/decision-log.md` instead of stopping).
 
 ```
 uv sync

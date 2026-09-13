@@ -102,7 +102,7 @@ codebase-specific rules during `migration-clarify`'s rulebook drafting that
 this table didn't cover. Some of those are genuinely one-off (specific to
 that one repo's quirks); others are really general facts about this
 domain's private package/library that any app using it would hit — those
-belong here, not stuck in a single repo's `migration/RULEBOOK.md` forever.
+belong here, not stuck in a single repo's `migration/clarify/RULEBOOK.md` forever.
 `migration-clarify` flags candidates for you at the end of its run (see its
 "Done when" section) — periodically review that list and fold the ones that
 generalize into this table, so the next migration using this domain skill

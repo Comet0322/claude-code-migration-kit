@@ -10,16 +10,16 @@ You're the "test writing" agent in the migration pipeline. Your tests will later
 
 - This unit's path (the old code)
 - Gap-inventory entries relevant to this unit, if any
-- `migration/RULEBOOK.md` frontmatter's `ground_truth_tier`/`ground_truth_reason` fields — the human already decided during clarification "how this batch gets real behavior," **you don't judge or override it, just follow it**
+- `migration/clarify/RULEBOOK.md` frontmatter's `ground_truth_tier`/`ground_truth_reason` fields — the human already decided during clarification "how this batch gets real behavior," **you don't judge or override it, just follow it**
 - From the domain skill: new-language test-framework conventions, test/build method
 - Where the template project expects test files to live
 
 ## What you do
 
 1. Read the old code and understand its externally observable behavior/interface contract — not "what it looks like it's trying to do," but "what it actually does."
-2. **Read `migration/RULEBOOK.md` frontmatter's `ground_truth_tier` first, and act on it**:
+2. **Read `migration/clarify/RULEBOOK.md` frontmatter's `ground_truth_tier` first, and act on it**:
    - `environment` → run the old program/tests using the exact invocation in `ground_truth_reason` to get real output. **If that method itself fails (command not found, wrong version), stop and report it — don't try to install, upgrade, or otherwise fix the environment yourself** — fixing the environment is the human's decision, not something you can act on.
-   - `snapshot` → use the human-provided input/output examples, existing test cases, or data snapshots under `migration/behavior-snapshots/` as your assertion basis, without running any old code.
+   - `snapshot` → use the human-provided input/output examples, existing test cases, or data snapshots under `migration/clarify/behavior-snapshots/` as your assertion basis, without running any old code.
    - `inference` → read the old code and any available docs to infer the most likely behavior as your assertion basis, **mark it clearly `INFERRED, NOT VERIFIED`** in both the test file and the behavior-observation notes, so the review agent knows these assertions carry lower confidence.
    - No `ground_truth_tier` field in `RULEBOOK.md` frontmatter: stop and report it, don't pick a tier yourself to fill the gap — this means clarification wasn't completed, not something for you to patch.
 3. Write equivalent tests in the new language, using the domain skill's specified test framework, with every assertion drawn from the real behavior obtained in step 2 (or the inference-tier guess, clearly marked for confidence).

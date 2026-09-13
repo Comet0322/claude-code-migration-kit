@@ -20,7 +20,7 @@ translation is correct — that's the reviewer's job.
 ## Calling convention
 
 The caller (top-level orchestrator or a human) always passes
-`migration/manifest.tsv`, and clearly states this call's **scope**: **only
+`migration/clarify/manifest.tsv`, and clearly states this call's **scope**: **only
 rows where `pilot` is `yes`**, or **all rows** (`pilot` unrestricted). The
 first round (before pilot sign-off) gets the pilot-only scope; calls after
 sign-off get the full scope. **Either way, you only process units with
@@ -35,12 +35,12 @@ pilot to full scope is the caller's sign-off decision, not your logic.
    `target_path` (`pilot`/`cycle_group`/`risk_flag`/`risk_reason` are
    leftovers from the analysis/clarification stages — extra columns don't
    affect this check).
-2. `migration/RULEBOOK.md` (frontmatter must have `domain_skill`,
-   `ground_truth_tier`, `ground_truth_reason`) and `migration/inventory.tsv`
+2. `migration/clarify/RULEBOOK.md` (frontmatter must have `domain_skill`,
+   `ground_truth_tier`, `ground_truth_reason`) and `migration/clarify/inventory.tsv`
    both exist.
 3. If the selected domain skill's "template project" section lists more than
    one shape option (e.g. target Python has both a FastAPI-service and an
-   ETL-batch template skill), `migration/RULEBOOK.md` frontmatter must have a
+   ETL-batch template skill), `migration/clarify/RULEBOOK.md` frontmatter must have a
    `target_shape` field pointing at one — this decides which template
    knowledge to feed the three subagents. A domain skill with only one shape
    (no divergence) doesn't need this field. Missing it → stop, tell the
@@ -96,7 +96,7 @@ around a red line — stop, follow the rule instead:
 
 ## Unit state
 
-Each unit's state lives in `migration/state/<unit_id>.json`:
+Each unit's state lives in `migration/convert/state/<unit_id>.json`:
 
 ```json
 {
@@ -177,7 +177,7 @@ asks for it), for every unit with `status: pending`:
    an agent. No such marker → run the normal three steps.
 
 1. **Call `migration-test-writer`**, giving it `unit_id`, `source_path`, the
-   relevant inventory rows, `migration/RULEBOOK.md` frontmatter's
+   relevant inventory rows, `migration/clarify/RULEBOOK.md` frontmatter's
    `ground_truth_tier`/`ground_truth_reason` fields (it branches its whole
    method on this — withholding it isn't optional context, it's a required
    input), and the domain skill's test-framework conventions, test/build
@@ -193,7 +193,7 @@ asks for it), for every unit with `status: pending`:
    structured review report.
 
 **Every time you call any of the above agents, whether it passed or needs a
-rerun, append its usage stats as one line to `migration/cost-log.tsv`**
+rerun, append its usage stats as one line to `migration/convert/cost-log.tsv`**
 (columns: `timestamp, unit_id, agent, attempt, tokens, tool_uses,
 duration_ms, outcome`, e.g.:
 `2026-09-12T18:20:00Z	user_sync	migration-translator	1	48213	9	62000	pass`
@@ -225,7 +225,7 @@ number, not a feeling).
      step 2's conversion doesn't need rerunning, go straight back to step 3
      for re-review); at the cap, status `fail-test`, skip, log.
    - **Review reports "rule gap"** → status `rule-gap`, append one line to
-     `migration/deviation-log.tsv` (`timestamp / unit_id / category /
+     `migration/convert/deviation-log.tsv` (`timestamp / unit_id / category /
      detail`), no retry, skip this unit.
 
 ## Rule gap recurrence threshold: pause, don't keep force-translating
@@ -236,7 +236,7 @@ has now hit 3+ occurrences. If so:
 - **Stop processing the rest of the manifest's units in that same
   category** (other categories keep running unaffected).
 - Write this category, with its known cases, as a pending human decision
-  appended to `migration/rulebook-amendments.md` (**never edit `RULEBOOK.md`
+  appended to `migration/convert/rulebook-amendments.md` (**never edit `RULEBOOK.md`
   directly** — the rulebook is read-only inside the loop; amendments are
   merged by the human between batches).
 - List explicitly in the final report which units paused due to rule gaps.
@@ -244,14 +244,14 @@ has now hit 3+ occurrences. If so:
 ## Integration check, once all units pass
 
 After each call's scope finishes (whether pilot-only or all rows), check
-whether every single row in `migration/manifest.tsv` (**not just this
+whether every single row in `migration/clarify/manifest.tsv` (**not just this
 call's scope**) is already `pass` or `excluded` — `excluded` units have no
 target file and never become `pass`, so their non-`pass` state must never
 permanently block the integration check from triggering. Skip this section
 and go straight to "done when" if not everything is `pass`/`excluded` yet.
 
 Only once everything is `pass`/`excluded`, and only once (use whether
-`migration/state/_integration.json` exists to know if it's already run;
+`migration/convert/state/_integration.json` exists to know if it's already run;
 redo this section if any unit's state gets reset to `pending` or a failure
 state afterward):
 
@@ -270,10 +270,10 @@ shifts from "one unit" to "the whole `target/` project":
    undescribed (or explicitly says there's no entry point) — don't invent
    one.
 
-Append this call's usage stats to `migration/cost-log.tsv` too (`unit_id`
+Append this call's usage stats to `migration/convert/cost-log.tsv` too (`unit_id`
 column = `_integration`).
 
-Write `migration/state/_integration.json`: `{"status": "pass"|"fail", "note":
+Write `migration/convert/state/_integration.json`: `{"status": "pass"|"fail", "note":
 "..."}`. **A failure doesn't auto-retry** — the problem could span multiple
 units, unlike a single unit's failure where the responsible agent is clear;
 list concrete symptoms in the final report and let the human decide which
@@ -291,14 +291,14 @@ manifest-scanning loop, a separate check run once against a batch that's
 already all `pass`/`excluded`.
 
 Only run this if the integration check's
-`migration/state/_integration.json` has `status: pass`, and `RULEBOOK.md`
+`migration/convert/state/_integration.json` has `status: pass`, and `RULEBOOK.md`
 frontmatter has `parity_check: enabled` — otherwise just record
 `parity_status` as `skipped`. Already done (`_integration.json`'s
 `parity_status` is already `pass` or `fail`) → don't redo it, unless a human
 resets it to unset.
 
 1. **Get the input/output baseline for comparison**: `ground_truth_tier:
-   snapshot` → use existing cases under `migration/behavior-snapshots/`;
+   snapshot` → use existing cases under `migration/clarify/behavior-snapshots/`;
    `tier: environment` → use the invocation method recorded in `RULEBOOK.md`
    frontmatter's `ground_truth_reason`, run a few representative inputs
    against the old system live, and record the outputs as the baseline.
@@ -315,14 +315,14 @@ resets it to unset.
    mechanically diff the output against the baseline — no documented entry
    point → skip this section and say plainly in the report "no entry point,
    parity check not possible," don't invent one.
-4. Merge the result into `migration/state/_integration.json` (don't open a
+4. Merge the result into `migration/convert/state/_integration.json` (don't open a
    new file), adding two fields: `parity_status: pass|fail|skipped`,
    `parity_note`.
 5. **A failure doesn't auto-retry** — list the differences and let the human
    decide which unit to send back, same handling as an integration-check
    failure.
 
-Append this call's usage stats to `migration/cost-log.tsv` too (`unit_id`
+Append this call's usage stats to `migration/convert/cost-log.tsv` too (`unit_id`
 column = `_parity`).
 
 This section's scope corresponds to the original code-migration-kit's Step 6
@@ -348,7 +348,7 @@ pre-completed, human confirmed keep, never went through this kit's
 tests/review" as their own line, separate from the normal-pipeline pass
 count — same reasoning as `excluded`, a different confidence level the
 human needs to see, not silently merged into "pass."
-Attach `migration/cost-log.tsv`'s totals too (total tokens, total time,
+Attach `migration/convert/cost-log.tsv`'s totals too (total tokens, total time,
 subtotals per agent role) — this is what the human uses to decide "given
 what this pilot cost, roughly how much would the full batch cost." Remind
 explicitly that terminal-state units need their status reset to `pending`

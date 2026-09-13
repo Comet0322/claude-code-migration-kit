@@ -14,17 +14,17 @@ output decides where the conversion stage's rules come from. Mistakes here
 are the most expensive, so make your reasoning visible after every section
 instead of deciding silently and moving on.
 
-## Headless test protocol (active when `migration/.headless-test` exists)
+## Headless test protocol (active when `migration/clarify/.headless-test` exists)
 
 This skill normally uses `AskUserQuestion` to let a human decide at several
-points. If the marker file `migration/.headless-test` exists, you're being
+points. If the marker file `migration/clarify/.headless-test` exists, you're being
 driven unattended by an automated test harness:
 
 - Anywhere that would normally call `AskUserQuestion` (or otherwise stop and
   wait for a reply): instead, using the same evidence and reasoning you'd
   use to rank recommendations, **pick the option you judge most reasonable
   yourself**, append the full candidate comparison, reasoning, and
-  confidence level to `migration/decision-log.md` (headed `## <section
+  confidence level to `migration/clarify/decision-log.md` (headed `## <section
   title>`), then proceed with that decision — don't stop. End the entry with
   `STATUS: decided`.
 - Exception: if the evidence genuinely doesn't favor any option (e.g.
@@ -37,7 +37,7 @@ driven unattended by an automated test harness:
   use the regular `AskUserQuestion` flow.
 
 Domain-skill selection specifically also honors one more, narrower marker:
-`migration/.headless-test-domain-skill` (only meaningful together with
+`migration/clarify/.headless-test-domain-skill` (only meaningful together with
 `.headless-test`). If present, its contents force-select a specific domain
 skill instead of running the normal self-decide/ambiguity logic — see
 section 1. This exists purely to regression-test a domain skill's full
@@ -49,14 +49,14 @@ migration run has no such marker available, since a real run has no way to
 know the "correct" answer in advance — this is a test-only escape hatch, not
 a general override mechanism for any other section's decisions.
 
-Regardless of the marker, `migration/RULEBOOK.md` frontmatter's
+Regardless of the marker, `migration/clarify/RULEBOOK.md` frontmatter's
 `ground_truth_tier` field must be one of `environment` / `snapshot` /
 `inference`, with `ground_truth_reason` holding the rationale — a format
 requirement, not a change to the three-tier decision logic below.
 
 ## 1. Select domain skill (once per repo, not per unit)
 
-- Check whether `migration/RULEBOOK.md` already exists with a `domain_skill`
+- Check whether `migration/clarify/RULEBOOK.md` already exists with a `domain_skill`
   field in its frontmatter — if already selected earlier in this
   conversation (e.g. rerunning this skill in the same session), load it and
   don't ask again.
@@ -69,25 +69,25 @@ requirement, not a change to the three-tier decision logic below.
   `migration/analysis/units.tsv`), compare against each candidate's "app
   types this domain skill covers" and "private package documentation"
   sections, rank the best match as the recommendation. If
-  `migration/.headless-test` doesn't exist, use `AskUserQuestion` to ask the
+  `migration/clarify/.headless-test` doesn't exist, use `AskUserQuestion` to ask the
   human which one (candidates + recommendation + reasoning); if it exists,
-  check `migration/.headless-test-domain-skill` first (see the Headless test
+  check `migration/clarify/.headless-test-domain-skill` first (see the Headless test
   protocol section above) before falling back to the normal
   self-decide/ambiguity logic:
   - Present and its content matches one of the candidates found above → use
     it directly, skip the self-decide/ambiguity comparison entirely (a
     forced test override, not a recommendation — no fingerprint match
-    needed to justify it). Log the pick to `migration/decision-log.md`
+    needed to justify it). Log the pick to `migration/clarify/decision-log.md`
     exactly as any other headless decision, explicitly noting it was a
     forced test override rather than a self-decided pick, `STATUS: decided`.
   - Present but its content names something that isn't one of the
     candidates found above → this is a fixture/test misconfiguration, not a
-    real ambiguity. Log the mismatch to `migration/decision-log.md`,
+    real ambiguity. Log the mismatch to `migration/clarify/decision-log.md`,
     `STATUS: needs-human`, stop — don't silently ignore the override or
     silently fall back to self-deciding instead.
   - Not present → follow the Headless test protocol's normal
     self-decide/ambiguity logic.
-- Once decided, write it into `migration/RULEBOOK.md` frontmatter
+- Once decided, write it into `migration/clarify/RULEBOOK.md` frontmatter
   (`domain_skill` field). If the file doesn't exist yet, create a
   frontmatter-only skeleton here with the body left blank (e.g.
   `---\ndomain_skill: <name>\n---\n\n# Rulebook\n`) — sections 3, 4, and 6
@@ -148,7 +148,7 @@ Check in order which tier applies to this batch (or repo):
    frontmatter's `ground_truth_reason`, `ground_truth_tier` = `environment`.
 2. **No environment: ask the human for mock data / snapshots**: request
    input/output examples, existing test cases, or production data snapshots
-   for this code, store them under `migration/behavior-snapshots/`,
+   for this code, store them under `migration/clarify/behavior-snapshots/`,
    `ground_truth_tier` = `snapshot`. Second choice, but closer to most real
    migrations — many legacy systems simply can't be installed in a migration
    sandbox.
@@ -164,8 +164,8 @@ Write the chosen tier into `RULEBOOK.md` frontmatter's `ground_truth_tier`/
 what to do — it never judges this itself, and never fixes the environment
 itself.
 
-In headless mode (`migration/.headless-test` exists), if tier 1 (runtime
-environment) probing fails and `migration/behavior-snapshots/` has no usable
+In headless mode (`migration/clarify/.headless-test` exists), if tier 1 (runtime
+environment) probing fails and `migration/clarify/behavior-snapshots/` has no usable
 material, **default straight to `ground_truth_tier: inference`**, with
 `ground_truth_reason` = "automated test environment, no source-side runtime
 or behavior snapshot available," and don't stop — a deliberately relaxed test
@@ -191,7 +191,7 @@ output, rather than just checking the new system is internally
 consistent?" `inference` tier has no real old behavior to use as a baseline
 — skip this without asking.
 
-Record the answer in `migration/RULEBOOK.md` frontmatter's `parity_check`
+Record the answer in `migration/clarify/RULEBOOK.md` frontmatter's `parity_check`
 field (`enabled`, or omit — default off). This is a cost/value decision, not
 a default — see `migration-convert`'s "Parity check" section for how it runs
 once all units are converted.
@@ -204,7 +204,7 @@ with the human the translation decisions **specific to this codebase and not
 covered by the domain skill**: read out places in the codebase where "two
 agents might make different choices" (backed by data, e.g. "this pattern
 appears N times"), decide them one at a time with the human, and add them to
-`migration/RULEBOOK.md`'s body (section 1 already created a frontmatter-only
+`migration/clarify/RULEBOOK.md`'s body (section 1 already created a frontmatter-only
 skeleton; this is filling in the body after the frontmatter, not creating a
 new file).
 
@@ -266,7 +266,7 @@ are made by a human between batches.
 Scan `migration/analysis/units.tsv`, list the places where the target
 language forces an explicit decision that the source language could leave
 implicit (ownership, nullability, interface contracts), write
-`migration/inventory.tsv`. A table for agents to look things up in, not
+`migration/clarify/inventory.tsv`. A table for agents to look things up in, not
 something a human is meant to read end to end.
 
 ## 6. Decide target project shape (optional, only if the domain skill's template section lists more than one option)
@@ -282,14 +282,14 @@ If the selected domain skill's "template project" section lists more than
 one option, use `AskUserQuestion` to confirm with the human which shape
 applies to **this migration (this `migration/` directory, this
 manifest)** — same as domain-skill selection, one manifest is always one
-shape, never decided per unit. (If `migration/.headless-test` exists, follow
+shape, never decided per unit. (If `migration/clarify/.headless-test` exists, follow
 the Headless test protocol instead of calling `AskUserQuestion`.) If the
 human tells you this migration's manifest genuinely mixes two shapes, report
 that back: it means this repo should split into two separate migration
 instances (each its own `migration/` directory), not mix shapes in one
 manifest.
 
-Once decided, write it into `migration/RULEBOOK.md` frontmatter's
+Once decided, write it into `migration/clarify/RULEBOOK.md` frontmatter's
 `target_shape` field (value: template skill name). This field decides which
 template skeleton `migration-convert` scaffolds the target project from and
 which template knowledge it feeds the three subagents.
@@ -325,7 +325,7 @@ field; otherwise follow the domain skill's template-project section
 directly). **Fill in the `target_path` column in place on
 `migration/analysis/units.tsv` itself, change `source_path` to the copied
 local `legacy/...` path, then rename/move this file to
-`migration/manifest.tsv`** — don't write a fresh file and leave `units.tsv`
+`migration/clarify/manifest.tsv`** — don't write a fresh file and leave `units.tsv`
 sitting untouched under `migration/analysis/` — that would turn one set of
 content into two files that need to stay in sync; `units.tsv` shouldn't
 exist anymore once this step is done. Keep `units.tsv`'s existing
@@ -339,7 +339,7 @@ columns don't affect it.
 
 If the domain skill (or a source-side shared skill it references) names
 specific implementation files in its "private package documentation"
-section, match each unit's `source_path` filename in `migration/manifest.tsv`
+section, match each unit's `source_path` filename in `migration/clarify/manifest.tsv`
 against them (`units.tsv` has already been renamed into `manifest.tsv` by
 now — `cycle_group` and the other columns are still in the same file, no
 need to open another one). An exact match means this unit **is** the private
@@ -349,7 +349,7 @@ is pointless; only the calling units need their calls rewritten to use
 `corplib` instead.
 
 Leave `target_path` blank for such units (or write `(excluded — replaced by
-<skill name>)`), and immediately write `migration/state/<unit_id>.json`
+<skill name>)`), and immediately write `migration/convert/state/<unit_id>.json`
 with `status` set directly to `excluded` (not `pending`), `last_note`
 stating which skill replaced it. Log this decision in `RULEBOOK.md` (same
 as any other batch-specific decision — visible reasoning), don't do it
@@ -372,7 +372,7 @@ exclusion: whether to keep the UI layer is a **scope decision**, not a
 technical fact like "the target side already has an equivalent," the domain
 skill can't decide this for you, always ask the human.
 
-If `migration/manifest.tsv` has units that look like UI layer, use
+If `migration/clarify/manifest.tsv` has units that look like UI layer, use
 `AskUserQuestion` to ask the human whether this whole migration should
 "keep the UI (convert it along with everything else — meaning the selected
 domain skill needs matching target-side UI framework knowledge, covered in
@@ -386,7 +386,7 @@ recommended option (e.g. "the domain skill records that this department's
 convention is to drop the UI, for this reason — apply the same here?") —
 this section only sharpens the question, **it can never replace this human
 confirmation step**; if unwritten, ask plainly with no recommendation. (If
-`migration/.headless-test` exists, follow the Headless test protocol instead
+`migration/clarify/.headless-test` exists, follow the Headless test protocol instead
 of calling `AskUserQuestion` — in that case, the "UI/scope conventions"
 section content is exactly the evidence used to rank the recommendation, use
 it directly.)
@@ -409,7 +409,7 @@ scenarios).
 ### Identify units with pre-existing manual work — ask the human whether to keep them
 
 After filling in `target_path` for every row, additionally check: this
-`target_path` **already has a non-empty file**, and `migration/state/<unit_id>.json`
+`target_path` **already has a non-empty file**, and `migration/convert/state/<unit_id>.json`
 **doesn't exist yet** (meaning this kit's own pipeline never touched this
 unit) — a signal that someone put something there manually (or otherwise)
 before this kit ever got involved. Different from what `migration-convert`'s
@@ -423,7 +423,7 @@ the scope clearly, then ask with `AskUserQuestion` — they can answer for the
 whole batch at once, or per unit if they prefer:
 
 1. **Keep it, trust it as-is** — write `status: pass` directly into
-   `migration/state/<unit_id>.json`, `last_note` = "manually pre-completed,
+   `migration/convert/state/<unit_id>.json`, `last_note` = "manually pre-completed,
    human confirmed keep, never went through this kit's tests/review." The
    final burndown report must **list these separately from normal pipeline
    passes** — their confidence level differs from a pass that actually went
@@ -435,7 +435,7 @@ whole batch at once, or per unit if they prefer:
    existing code; only if it fails do you ask the human whether to hand it
    to the kit for a fresh translation. The safest option: neither blind
    trust nor destroy-first. Record this decision in
-   `migration/state/<unit_id>.json`'s `last_note` (e.g. "manually
+   `migration/convert/state/<unit_id>.json`'s `last_note` (e.g. "manually
    pre-completed, pending verification, skip conversion step") —
    `migration-convert` uses this note to decide whether to skip the
    conversion step.
@@ -475,7 +475,7 @@ move on.
 
 ## 9. Mark the pilot subset
 
-Add a `pilot` column to `migration/manifest.tsv` (values `yes`/`no`), mark
+Add a `pilot` column to `migration/clarify/manifest.tsv` (values `yes`/`no`), mark
 2-3 units `yes` from it — prioritize units with `risk_flag` = `high`, pair
 with one typical/ordinary unit — mark everything else `no`. This subset is
 what the conversion stage runs first: the rulebook hasn't been validated

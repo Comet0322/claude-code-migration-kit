@@ -132,7 +132,7 @@ def test_run_loop_writes_pilot_signoff_then_continues(monkeypatch, tmp_path: Pat
     result = run_loop(tmp_path, "e2e", DriverConfig(max_turns=5, max_wallclock_seconds=60))
 
     assert result.outcome == Outcome.SUCCESS
-    assert (tmp_path / "migration" / "pilot-signoff.txt").exists()
+    assert (tmp_path / "migration" / "convert" / "pilot-signoff.txt").exists()
 
 
 def test_run_loop_stops_at_max_turns(monkeypatch, tmp_path: Path):

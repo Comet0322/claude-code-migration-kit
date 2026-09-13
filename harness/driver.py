@@ -44,7 +44,7 @@ class DriverTimeoutError(Exception):
 
 
 _E2E_PROMPT = "用 migration skill 處理這次遷移。"
-_CONVERT_ONLY_PROMPT = "呼叫 migration-convert，manifest 路徑帶 migration/manifest.tsv。"
+_CONVERT_ONLY_PROMPT = "呼叫 migration-convert，manifest 路徑帶 migration/clarify/manifest.tsv。"
 
 
 async def _query_once(run_dir, prompt: str, config: DriverConfig) -> str:
@@ -113,7 +113,9 @@ def _run_loop_fresh(run_dir, mode: str, config: DriverConfig) -> DriverResult:
         decision = evaluate_gate(state)
 
         if decision.write_pilot_signoff:
-            (run_dir / "migration" / "pilot-signoff.txt").write_text(
+            signoff_path = run_dir / "migration" / "convert" / "pilot-signoff.txt"
+            signoff_path.parent.mkdir(parents=True, exist_ok=True)
+            signoff_path.write_text(
                 f"auto-approved by harness: {decision.reason}\n", encoding="utf-8"
             )
 
@@ -158,7 +160,9 @@ async def _run_loop_persistent(run_dir, mode: str, config: DriverConfig) -> Driv
             decision = evaluate_gate(state)
 
             if decision.write_pilot_signoff:
-                (run_dir / "migration" / "pilot-signoff.txt").write_text(
+                signoff_path = run_dir / "migration" / "convert" / "pilot-signoff.txt"
+                signoff_path.parent.mkdir(parents=True, exist_ok=True)
+                signoff_path.write_text(
                     f"auto-approved by harness: {decision.reason}\n", encoding="utf-8"
                 )
 

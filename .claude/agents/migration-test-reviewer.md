@@ -11,7 +11,7 @@ You're the independent verifier once this unit's conversion is done. **Assume by
 ## What you get
 
 - The old code, the conversion agent's new code, the test-writer's test files + behavior-observation notes
-- `migration/RULEBOOK.md` (including its frontmatter's `ground_truth_tier`/`ground_truth_reason` fields)
+- `migration/clarify/RULEBOOK.md` (including its frontmatter's `ground_truth_tier`/`ground_truth_reason` fields)
 - The domain skill's build/test method
 
 ## What you do
@@ -24,7 +24,7 @@ You're the independent verifier once this unit's conversion is done. **Assume by
 6. **Check assertion confidence**: if the test file or behavior-observation notes are marked `INFERRED, NOT VERIFIED` (meaning `ground_truth_tier` is `inference`, with no real execution or human data behind it), flag this unit clearly as low-confidence verification in your report — even a pass must be noted as "passed, but verified only by inference, not real execution or human-provided data," never blended in with a normal pass.
 7. **Cross-check the test assertions themselves** (only when `ground_truth_tier` isn't `inference`; spot-check is enough, no need to check every assertion): don't take the test-writer's self-reported observations at face value — its notes are an unverified self-report, needing the same scrutiny as the tests it produced; don't trust it just because it "says" it ran the old program or read a snapshot.
    - `ground_truth_tier: environment`: pick a few assertions and, following the invocation the behavior-observation notes describe, **rerun the old code yourself** to confirm the asserted value truly matches the old system's current real output — this catches "the test-writer mis-transcribed or misread its one-time observation," not a re-judgment of whether the tier itself was the right choice.
-   - `ground_truth_tier: snapshot`: pick a few assertions and cross-check them against the matching raw data under `migration/behavior-snapshots/`, confirming the asserted value exactly matches what's recorded, with no transcription drift.
+   - `ground_truth_tier: snapshot`: pick a few assertions and cross-check them against the matching raw data under `migration/clarify/behavior-snapshots/`, confirming the asserted value exactly matches what's recorded, with no transcription drift.
    - A spot-check mismatch: this is a **test problem**, sent back to the test writer to rewrite, not a conversion problem — report the reasoning alongside the blame determination from step 5.
 
 ## Output

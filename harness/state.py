@@ -57,7 +57,7 @@ def _read_tsv_with_header(path: Path) -> list[dict[str, str]]:
 
 
 def _read_unit_states(migration_dir: Path) -> dict[str, UnitState]:
-    state_dir = migration_dir / "state"
+    state_dir = migration_dir / "convert" / "state"
     if not state_dir.exists():
         return {}
     result: dict[str, UnitState] = {}
@@ -75,7 +75,7 @@ def _read_unit_states(migration_dir: Path) -> dict[str, UnitState]:
 
 
 def _read_integration_status(migration_dir: Path) -> str | None:
-    path = migration_dir / "state" / "_integration.json"
+    path = migration_dir / "convert" / "state" / "_integration.json"
     if not path.exists():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -83,7 +83,7 @@ def _read_integration_status(migration_dir: Path) -> str | None:
 
 
 def _read_rulebook_amendments_pending(migration_dir: Path) -> bool:
-    path = migration_dir / "rulebook-amendments.md"
+    path = migration_dir / "convert" / "rulebook-amendments.md"
     if not path.exists():
         return False
     return path.read_text(encoding="utf-8").strip() != ""
@@ -93,7 +93,7 @@ _STATUS_LINE_RE = re.compile(r"^STATUS:\s*(decided|needs-human)\s*$", re.MULTILI
 
 
 def _read_decision_log_last_status(migration_dir: Path) -> str | None:
-    path = migration_dir / "decision-log.md"
+    path = migration_dir / "clarify" / "decision-log.md"
     if not path.exists():
         return None
     matches = _STATUS_LINE_RE.findall(path.read_text(encoding="utf-8"))
@@ -109,7 +109,7 @@ def _read_rulebook_frontmatter(migration_dir: Path) -> dict[str, str]:
     # frontmatter (see migration-clarify) — no nested structures here, so a
     # tiny hand-rolled parser avoids pulling in a YAML dependency just for
     # this.
-    path = migration_dir / "RULEBOOK.md"
+    path = migration_dir / "clarify" / "RULEBOOK.md"
     if not path.exists():
         return {}
     match = _FRONTMATTER_RE.match(path.read_text(encoding="utf-8"))
@@ -144,19 +144,19 @@ def _pilot_unit_ids(manifest_rows: list[dict[str, str]]) -> list[str]:
 
 def read_run_state(run_dir: Path) -> RunState:
     migration_dir = run_dir / "migration"
-    manifest_rows = _read_tsv_with_header(migration_dir / "manifest.tsv")
+    manifest_rows = _read_tsv_with_header(migration_dir / "clarify" / "manifest.tsv")
     return RunState(
         run_dir=run_dir,
         manifest_rows=manifest_rows,
         pilot_unit_ids=_pilot_unit_ids(manifest_rows),
-        pilot_signoff_exists=(migration_dir / "pilot-signoff.txt").exists(),
+        pilot_signoff_exists=(migration_dir / "convert" / "pilot-signoff.txt").exists(),
         unit_states=_read_unit_states(migration_dir),
         integration_status=_read_integration_status(migration_dir),
         # deviation-log.tsv 是純追加寫入的 log，每次只是 >> 加一行資料，
         # 從來沒有寫過標題列——這裡務必維持 skip_header=False，改成 True
         # 會靜默漏掉第一筆真實的 deviation 記錄。跟上面 manifest.tsv 的
         # skip_header=True 是刻意的不對稱，不是遺漏。
-        deviation_rows=_read_tsv(migration_dir / "deviation-log.tsv", _DEVIATION_FIELDS, skip_header=False),
+        deviation_rows=_read_tsv(migration_dir / "convert" / "deviation-log.tsv", _DEVIATION_FIELDS, skip_header=False),
         rulebook_amendments_pending=_read_rulebook_amendments_pending(migration_dir),
         decision_log_last_status=_read_decision_log_last_status(migration_dir),
         domain_skill=_read_domain_skill(migration_dir),
