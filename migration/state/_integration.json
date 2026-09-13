@@ -1,4 +1,0 @@
-{
-  "status": "pass",
-  "note": "重跑通過。pom.xml 補上 spring-boot-maven-plugin 的 repackage execution 後，fat jar 打包正確（Main-Class: JarLauncher, Start-Class: Application）。mvn compile / mvn test（JDK21 診斷覆蓋，7/7 過）都通過。java -jar 執行：Spring context 成功啟動、DI 組裝正確，一路執行到 UserSyncJob 的 SQL 查詢，因這台機器沒有真實 MS SQL Server、fallback 空 SQLite 缺 sync_log 表而拋例外；例外沒有被吞掉，process 以非 0 exit code 結束——符合 java-corplib 模板規則、也符合 ground-truth-strategy.md 的 inference tier 環境限制預期。此為低可信度通過（inference tier，沒有真實 DB 可比對），已在紀錄中註明。"
-}

@@ -1,5 +1,0 @@
-unit_id	gap_type	description	decision
-user_sync	exception_contract	Delphi 的 RunNightlySync 在批次寫入失敗時捕捉例外、Rollback、LogMessage(llError, ...) 後直接 return（process 視為正常結束）。java-corplib 模板要求「job 拋出未捕捉例外時 process 要以非 0 exit code 結束，不要吞掉錯誤讓 process 看起來正常」。兩者衝突：照原行為吞掉錯誤，還是照模板要求往外拋？	沿用原始行為：UserSyncJob.run() 內捕捉例外、rollback、記錄 error log 後正常返回（不重新拋出）。理由：這是舊系統既有的營運決策（同步失敗不視為批次致命錯誤，下一輪排程會重試），遷移不改變既有行為；轉換 agent 不用因為模板的一般性建議去改變這個 unit 已經明確寫死的錯誤處理邏輯。
-user_sync	type_narrowing	Delphi 用 Variant 存放 Query 回傳的 dataset（Rows[RowIndex].Name / .Id），沒有靜態型別。Java 的 corplib fetchAll 回傳 List<Map<String,Object>>，欄位型別需要明確 cast。id 欄位在 SQL 是什麼型別（int/bigint）、name 是不是一定非 null，原始碼看不出來。	id 一律當 long 處理（Map.get("id") 轉型 Long/long），name 當 String，且不額外做 null 檢查——沿用原始碼「假設資料庫回傳值一定有效」的隱含假設，不在轉換時新增防禦性判斷。
-user_sync	null_semantics	ExistingCount 是 Variant，用 > 0 比較；Java 需要決定用 int/long 且處理 fetchOne 找不到列（COUNT(*) 理論上一定有一列，但 Java 端 Optional/null 語意要明確）。	fetchOne 的結果視為一定非 null（COUNT(*) 查詢保證回傳一列），直接轉型成 long 取值比較 > 0，不包 Optional 判斷。
-dept200_data / dept200_log	ownership	兩個 unit 的物件生命週期／連線管理已由「library-replaced」決定（見 RULEBOOK.md 第 1 條）處理，不再需要獨立的 ownership 決策。	不適用（已在 rulebook 決定）。

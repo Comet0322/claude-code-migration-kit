@@ -1,5 +1,0 @@
-{
-  "status": "pass",
-  "attempts": { "test_writer": 1, "converter": 1, "reviewer": 1 },
-  "last_note": "審查通過。mvn test 在預設 mvn(JDK 26)下因 Mockito/ByteBuddy 不支援 Java 26 而失敗，但改用機器上已裝的 JDK 21（/Library/Java/JavaVirtualMachines/jdk-21.jdk）跑則 3 個測試全過、BUILD SUCCESS——判定為環境問題非程式碼問題。審查用 javap 反編譯 corplib-java 0.1.0 bytecode 驗證 rollback 行為（close() 在未 commit 時觸發 rollback）確實正確，rulebook 三條決策(exception_contract/type_narrowing/null_semantics)全部核對通過。建議事項（非本 unit 缺陷，供最終報告）：RULEBOOK.md 種子規則寫的是 Database.fromEnv() 逐行對應，但 UserSyncJob 實際用建構子注入——審查判定語意等價、合理，但建議人類在 rulebook 補充『DI 上移』的說明；且這個等價性要等 app unit（Application.java，目前還不存在）轉換完成才能真正閉環驗證。"
-}

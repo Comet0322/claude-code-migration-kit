@@ -1,5 +1,0 @@
-unit_id	risk_flag	reason
-dept200_data	normal	檔案小（69 行）、fan-out 僅 1（IniFiles），語法可完整解析
-dept200_log	normal	檔案小（33 行）、fan-out 僅 2（SysUtils, Classes），語法可完整解析
-user_sync	normal	檔案小（69 行）、fan-out 2（dept200_data, dept200_log），語法可完整解析
-app	normal	進入點檔案（10 行），fan-out 3，僅呼叫 UserSync.RunNightlySync

@@ -1,7 +1,0 @@
-spring:
-  application:
-    name: dept200
-
-corplib:
-  db:
-    dsn: ${CORPLIB_DB_DSN}

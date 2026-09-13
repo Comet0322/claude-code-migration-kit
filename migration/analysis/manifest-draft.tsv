@@ -1,5 +1,0 @@
-unit_id	source_path	cycle_group	order_index
-dept200_data	fixtures/dept200-delphi/legacy/Dept200Data.pas		1
-dept200_log	fixtures/dept200-delphi/legacy/Dept200Log.pas		2
-user_sync	fixtures/dept200-delphi/legacy/UserSync.pas		3
-app	fixtures/dept200-delphi/legacy/App.dpr		4

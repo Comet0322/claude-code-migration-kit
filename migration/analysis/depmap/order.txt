@@ -1,4 +1,0 @@
-Dept200Data.pas
-Dept200Log.pas
-UserSync.pas
-App.dpr

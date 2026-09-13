@@ -1,5 +1,0 @@
-App.dpr	Dept200Data.pas
-App.dpr	Dept200Log.pas
-App.dpr	UserSync.pas
-UserSync.pas	Dept200Data.pas
-UserSync.pas	Dept200Log.pas
