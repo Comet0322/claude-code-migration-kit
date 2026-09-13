@@ -1198,7 +1198,7 @@ def load_test_config(fixture_name: str, fixtures_root: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _domain_skill_from_decision_log(state: RunState) -> str | None:
+def _read_domain_skill_file(state: RunState) -> str | None:
     path = state.run_dir / "migration" / "domain-skill.txt"
     if not path.exists():
         return None
@@ -1210,7 +1210,7 @@ def build_eval_report(
 ) -> str:
     expected_outcome = test_config.get("expected_outcome", "success")
     expected_domain_skill = test_config.get("expected_domain_skill")
-    actual_domain_skill = _domain_skill_from_decision_log(state)
+    actual_domain_skill = _read_domain_skill_file(state)
     expected_units = test_config.get("expected_units", {})
 
     lines = [
@@ -1260,7 +1260,7 @@ def append_history(
     from datetime import datetime, timezone
 
     expected_domain_skill = test_config.get("expected_domain_skill")
-    actual_domain_skill = _domain_skill_from_decision_log(state)
+    actual_domain_skill = _read_domain_skill_file(state)
     expected_units = test_config.get("expected_units", {})
     units_pass = sum(
         1
