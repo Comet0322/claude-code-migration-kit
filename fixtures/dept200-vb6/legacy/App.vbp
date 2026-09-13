@@ -1,0 +1,6 @@
+Type=Exe
+Reference=*\G{00020430-0000-0000-C000-000000000046}#2.0#0#..\..\..\..\Windows\System32\stdole2.tlb#OLE Automation
+Object={9A7C1B10-0000-0000-0000-000000000200}#1.0#0; Dept200Common.dll
+Module=UserSync; UserSync.bas
+Startup="Sub Main"
+Name="Dept200NightlySync"

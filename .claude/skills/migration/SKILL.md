@@ -1,12 +1,10 @@
 ---
 name: migration
 description: >
-  遷移流程的頂層指揮 skill。只做路由：依 migration/ 目錄底下有沒有對應產
-  物，決定呼叫 migration-analyze / migration-clarify / migration-convert 中
-  的哪一個。自己不分析程式碼、不做規則決策、不轉換程式碼。適用於「批次同類
-  老舊應用」的語言遷移，每個 gate 結束就停，等人類簽核才進下一步。Use when
-  the user wants to migrate/port/rewrite a legacy application to a new
-  language using the pre-packaged domain knowledge (domain-* skills).
+  遷移流程的頂層指揮 skill。適用於「批次同類老舊應用」的語言遷移，使用預
+  先包裝好的領域知識（domain-* skills）。Use when the user wants to
+  migrate/port/rewrite a legacy application to a new language using the
+  pre-packaged domain knowledge (domain-* skills).
 ---
 
 # 遷移頂層指揮 skill
@@ -15,6 +13,18 @@ description: >
 不要自己動手分析、決策或翻譯——那分別是 migration-analyze /
 migration-clarify / migration-convert 的工作。每次呼叫完子 skill，照它自己
 的 gate 規則決定是否停下。
+
+## 開始之前（人類的一次性 repo 設定）
+
+`migration-convert` 開跑前會檢查 `.claude/settings.json` 有沒有擋
+`git commit`/`git push`/套件安裝指令的 deny 規則——沒有就停下，不會自己
+建立（見 `migration-convert` 的 Red Flags 一節）。這件事在
+`migration-analyze`/`migration-clarify` 階段都不需要，所以不會提早卡住，
+但**提早提醒好過讓人走到 convert 才第一次發現**：複製
+`templates/settings.json` 到這個 repo 的 `.claude/settings.json`（或合併
+`deny` 陣列進已有的檔案），細節見 `templates/settings.README.md`。第一次
+在一個新 repo 上跑這個 kit，趁 `migration-clarify` 結束、你在看 rulebook
+簽核的空檔一併弄好，不要等 convert 卡住才回頭處理。
 
 ## 範圍
 
@@ -45,18 +55,20 @@ Step 6 的行為比對（inherited test suite burndown / parity referee）——
    pass、沒有任何 rule-gap，也不要自己直接寫這個檔案跳過確認**：pilot 乾
    淨不等於人類已經簽核，這條線不能省。
 
-4. **pilot 已簽核，`migration/manifest.tsv` 裡還有 unit 不是 `pass`
-   狀態**：呼叫 `migration-convert`，manifest 路徑帶
+4. **pilot 已簽核，`migration/manifest.tsv` 裡還有 unit 不是 `pass`/
+   `excluded` 狀態**：呼叫 `migration-convert`，manifest 路徑帶
    `migration/manifest.tsv`（完整批次）。pilot 跑過的 unit 因為狀態已經是
-   `pass`，這次會自動跳過，不會重做。跑完呈現最終 burndown，STOP。
+   `pass`，這次會自動跳過，不會重做；`excluded` 的 unit（私有套件本身的
+   實作，被目標端 library 取代）本來就不需要轉換，也會直接跳過。跑完呈
+   現最終 burndown，STOP。
 
-5. **manifest 全部 `pass`，但 `migration/state/_integration.json` 不存在
-   或 `status` 不是 `pass`**：再呼叫一次 `migration-convert`（帶完整
-   manifest）——它會發現所有 unit 都過了，觸發那次一次性的整合 build/run
-   檢查。整合檢查失敗不算「完成」，STOP，列出症狀給人類判斷退回哪個
-   unit。
+5. **manifest 全部 `pass`/`excluded`，但 `migration/state/_integration.json`
+   不存在或 `status` 不是 `pass`**：再呼叫一次 `migration-convert`（帶完整
+   manifest）——它會發現所有 unit 都過了（或不需要轉換），觸發那次一次
+   性的整合 build/run 檢查。整合檢查失敗不算「完成」，STOP，列出症狀給
+   人類判斷退回哪個 unit。
 
-6. **manifest 全部 `pass` 且整合檢查也 `pass`**：回報完成。如果
+6. **manifest 全部 `pass`/`excluded` 且整合檢查也 `pass`**：回報完成。如果
    `migration/rulebook-amendments.md` 裡還有待處理項目，列出來提醒人
    類——那些是規則缺口的紀錄，不會自己被套用。
 

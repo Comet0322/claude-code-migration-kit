@@ -1,11 +1,9 @@
 ---
 name: migration-analyze
 description: >
-  分析 skill：唯讀掃描舊程式碼，產出依賴圖、模組清單、風險筆記、manifest 草
-  稿（決定 unit 順序、處理循環依賴）。不做任何規則決策、不選 domain skill、
-  不決定目標路徑——這些都需要 domain skill 才能做，而分析在 domain skill
-  選定之前就會跑。由頂層指揮 skill 在 migration/analysis/ 產物還不存在時呼
-  叫。
+  分析 skill：由頂層指揮 skill 在 migration/analysis/ 產物還不存在時呼
+  叫，唯讀掃描舊程式碼決定 unit 遷移順序。不要在其他情境下使用——規則決
+  策、domain skill 選定、目標路徑都不是這裡的工作。
 ---
 
 # 分析 skill

@@ -13,6 +13,64 @@ description: >
 這份文件本身不是拿來執行的，是拿來填的。填完、改名之後，它才是一個真正可以
 在 migration-clarify 選單裡出現的 domain skill。
 
+## 共用知識抽成獨立 skill（選填，雙向都適用）
+
+domain skill 裡任何一節，只要內容跟其他已存在的 domain skill **完全一
+致**，就不要各自複製貼上，抽成一個獨立 skill，讓對應節改寫成一句「同
+skill `<skill 名稱>`」。這件事有兩個方向，不要假設只有其中一種：
+
+- **目標端共用**：不同部門、不同來源語言，但轉換到同一種目標語言、用同
+  一套內部 library/慣例——例如 `python-corplib`、`java-corplib`，「模板
+  專案」「新語言 library 文件」「測試 / build 方法」三節指向它。
+- **來源端共用**：同一份來源程式碼（同部門、同來源語言）被規劃/已經遷移
+  到不止一種目標語言——例如部門 200 的 Delphi 舊應用同時有
+  `domain-200-delphi-java` 跟 `domain-200-delphi-python` 兩個 domain
+  skill，「這個 domain skill 涵蓋的應用類型」「私有套件文件」「來源語言
+  執行環境」「Fingerprint」這幾節其實是同一份事實，抽成一個獨立 skill
+  （例如 `legacy-200-delphi`），兩個 domain skill 都指向它。
+
+抽出來的獨立 skill 都寫清楚可以觸發的 `description`——目標端共用 skill
+通常在 migration 情境之外也有用（任何人要寫符合公司規範的這個語言的程式
+碼）；來源端共用 skill 則是「要理解/維護這批舊程式碼」時有用（不限於這
+次遷移）。
+
+**只有「語法轉換 / library 替換規則」這節天生不能共用**——它是「這個特
+定來源 → 這個特定目標」的對照表，換一個目標語言，對照表右欄就完全不
+同，一定要留在各自的 domain skill 裡自己填。
+
+命名上避開 `domain-` 開頭——這種 skill 不是「這個舊程式碼庫該套用哪個
+domain skill」的候選，`migration-clarify` 掃描 `domain-*` 選 domain
+skill 時不該把它列進選項。
+
+`migration-clarify`「載入 domain skill 內容」那步，看到任何一節寫「同
+skill `<名稱>`」時（不管是目標端還是來源端共用），都要額外用 Skill 工具
+載入那個 skill 取得實際內容，再一併餵給 rulebook 草擬跟轉換階段的三個
+subagent——subagent 本身沒有 Skill 工具權限，所以是 clarify/convert 讀
+進來後轉述給它們，不是 subagent 自己去呼叫。
+
+### 目標端不是單一慣例時：「模板專案」節列多個選項
+
+同一種目標語言在公司內部可能不是只有一套專案慣例——例如目標 Python 同時
+有「FastAPI 服務」跟「背景 ETL 批次」兩種形狀。這種情況下**不要**把兩種
+形狀硬塞進同一個目標端共用 skill，而是拆成兩個獨立 skill（例如
+`python-corplib-fastapi`、`python-corplib-etl`），DB/logging 這類真正跨
+形狀共用的部分留在更底層的 skill（例如 `python-corplib`，只放 library
+用法，不放專案骨架），兩個形狀 skill 各自引用它。
+
+domain skill 的「模板專案」節這時改寫成列出選項而不是單一「同 skill
+`<名稱>`」，例如：
+
+```
+這批應用的目標 Python 專案可能是 FastAPI 服務或背景 ETL 批次，兩者擇一：
+- 同 skill `python-corplib-fastapi`
+- 同 skill `python-corplib-etl`
+```
+
+`migration-clarify` 看到列出多個選項時，會用 `AskUserQuestion` 跟人類確
+認這次遷移（這份 manifest）要用哪一種、寫進 `migration/target-shape.txt`
+（見 `migration-clarify` 第 7 節）。只有一種形狀就直接寫單一「同 skill
+`<名稱>`」，不要為了「以防萬一」硬列多個選項。
+
 ## 這個 domain skill 涵蓋的應用類型
 
 [一句話描述哪一批老舊程式適用這份知識。盡量寫出可以拿來自動比對的具體指
@@ -24,7 +82,22 @@ domain skill」當推薦選項。]
 
 [這批應用共用的私有/內部 library 說明。**內嵌實際內容或指向倉庫內部的
 檔案路徑，不要放外部網址**——agent 沒有瀏覽器，air-gapped 環境連得到的
-話還能救，連不到的話一個外部連結就是廢話。]
+話還能救，連不到的話一個外部連結就是廢話。
+
+如果這個私有套件本身的實作是以**原始碼**形式跟著每個 app 一起放在被遷移
+的 repo 裡（例如 Delphi 私有 package 常見的做法：`.pas` unit 檔案跟著應
+用程式一起放，不是只有編譯好的 `.dll`/`.bpl`），**明確點名這些實作檔案
+的檔名**（例如「這個私有套件的實作是 `Dept200Data.pas`／
+`Dept200Log.pas`」）。migration-clarify 會拿這個去比對
+`modules.tsv`，把對應到的 unit 標記成 `excluded`（私有套件本身的實作
+不需要逐行翻譯，目標端已經有這裡定義的 library 取代它，只需要轉換呼叫
+端）——沒點名就沒有這個自動化，這些 unit 會被當一般應用程式碼硬翻譯一
+遍，白白花掉轉換/測試的成本。
+
+如果這個私有套件本身在被遷移的 repo 裡**看不到原始碼**（例如只是一個外
+部提供的編譯好的 COM DLL、透過 `Object=` reference 帶進來），就不用點
+名任何檔案——呼叫這個套件的程式碼本來就會被 `migration-analyze` 掃進
+「呼叫端」那個 unit 裡，沒有獨立的「套件本身」unit 需要排除。]
 
 ## 來源語言執行環境（選填）
 

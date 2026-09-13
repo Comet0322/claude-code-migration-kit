@@ -1,0 +1,5 @@
+unit_id	source_path	cycle_group
+dept200_data	fixtures/dept200-delphi/legacy/Dept200Data.pas
+dept200_log	fixtures/dept200-delphi/legacy/Dept200Log.pas
+user_sync	fixtures/dept200-delphi/legacy/UserSync.pas
+app	fixtures/dept200-delphi/legacy/App.dpr

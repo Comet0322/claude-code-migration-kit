@@ -1,0 +1,5 @@
+unit_id	source_path	target_path	status
+dept200_data	migration/legacy/Dept200Data.pas		library-replaced
+dept200_log	migration/legacy/Dept200Log.pas		library-replaced
+user_sync	migration/legacy/UserSync.pas	migration/target/dept200/src/main/java/com/company/dept200/job/UserSyncJob.java	pass
+app	migration/legacy/App.dpr	migration/target/dept200/src/main/java/com/company/dept200/Application.java	pass

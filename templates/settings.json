@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(brew install:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(yarn add:*)",
+      "Bash(mvn install:*)",
+      "Bash(gem install:*)"
+    ]
+  }
+}

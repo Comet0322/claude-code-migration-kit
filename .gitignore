@@ -1,3 +1,10 @@
 code-migration-kit-with-claude-code/
 .claude/scheduled_tasks.lock
 __pycache__/
+
+# build output for the vendor/ test-infrastructure packages (corplib
+# stand-ins) — keep the source, not the build artifacts
+vendor/*/target/
+**/*.egg-info/
+.venv/
+*.sqlite3

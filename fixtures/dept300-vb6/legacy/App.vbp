@@ -1,0 +1,5 @@
+Type=Exe
+Object={7F3D2A00-0000-0000-0000-000000000300}#1.0#0; CorpUtil300.dll
+Module=UserSync; UserSync.bas
+Startup="Sub Main"
+Name="Dept300NightlySync"
