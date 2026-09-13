@@ -386,6 +386,10 @@ def read_run_state(run_dir: Path) -> RunState:
         pilot_signoff_exists=(migration_dir / "pilot-signoff.txt").exists(),
         unit_states=_read_unit_states(migration_dir),
         integration_status=_read_integration_status(migration_dir),
+        # deviation-log.tsv 是純追加寫入的 log，每次只是 >> 加一行資料，
+        # 從來沒有寫過標題列——這裡務必維持 skip_header=False，改成 True
+        # 會靜默漏掉第一筆真實的 deviation 記錄。跟上面 manifest.tsv 的
+        # skip_header=True 是刻意的不對稱，不是遺漏。
         deviation_rows=_read_tsv(migration_dir / "deviation-log.tsv", _DEVIATION_FIELDS, skip_header=False),
         rulebook_amendments_pending=_read_rulebook_amendments_pending(migration_dir),
         decision_log_last_status=_read_decision_log_last_status(migration_dir),
