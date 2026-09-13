@@ -563,9 +563,9 @@ def evaluate_gate(state: RunState) -> GateDecision:
 
     if state.pilot_manifest_exists and not state.pilot_signoff_exists:
         pilot_unit_ids = _pilot_unit_ids(state)
-        pilot_units = [state.unit_states[u] for u in pilot_unit_ids if u in state.unit_states]
-        all_terminal_clean = pilot_units and all(
-            u.status in ("pass", "excluded") for u in pilot_units
+        pilot_units = [state.unit_states.get(u) for u in pilot_unit_ids]
+        all_terminal_clean = bool(pilot_unit_ids) and all(
+            u is not None and u.status in ("pass", "excluded") for u in pilot_units
         )
         if all_terminal_clean and not state.rulebook_amendments_pending:
             return GateDecision(
@@ -664,6 +664,30 @@ def test_needs_human_when_pilot_not_clean():
     assert decision.outcome == Outcome.NEEDS_HUMAN
 
 
+def test_needs_human_when_pilot_unit_still_pending_with_no_state_file():
+    # regression test: a unit listed in pilot-manifest.tsv with no state
+    # file yet (still pending) must NOT be silently skipped — it must block
+    # auto-signoff, not be treated as "not clean enough to matter".
+    import tempfile
+    from pathlib import Path
+    state = _base_state(
+        pilot_manifest_exists=True,
+        pilot_signoff_exists=False,
+        unit_states={"A": UnitState("A", "pass", {}, "")},  # B has no entry at all
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp)
+        migration_dir = run_dir / "migration"
+        migration_dir.mkdir()
+        (migration_dir / "pilot-manifest.tsv").write_text("A\tx\ty\nB\tx\ty\n", encoding="utf-8")
+        state.run_dir = run_dir
+
+        decision = evaluate_gate(state)
+
+    assert decision.outcome == Outcome.NEEDS_HUMAN
+    assert decision.write_pilot_signoff is False
+
+
 def test_success_when_manifest_all_done_and_integration_pass():
     state = _base_state(
         manifest_rows=[{"unit_id": "A", "source_path": "x", "target_path": "y"}],
@@ -699,7 +723,7 @@ def test_continue_when_nothing_terminal_yet():
 - [ ] **Step 6: 跑全部測試確認通過**
 
 Run: `python3 -m pytest harness/tests/test_gates.py -v`
-Expected: PASS（6 個測試都過）
+Expected: PASS（7 個測試都過）
 
 - [ ] **Step 7: Commit**
 
