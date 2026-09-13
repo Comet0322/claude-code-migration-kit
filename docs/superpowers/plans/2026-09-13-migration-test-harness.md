@@ -926,7 +926,7 @@ git commit -m "feat: harness.provisioning 建立 run 工作目錄"
       max_turns: int = 20
       max_wallclock_seconds: int = 3600
       claude_bin: str = "claude"
-      per_call_timeout_seconds: int = 900
+      per_call_timeout_seconds: int = 1800
       allowed_tools: str = "Bash,Edit,Write,Read,Glob,Grep,Skill,Task"
 
   @dataclass
@@ -936,9 +936,11 @@ git commit -m "feat: harness.provisioning 建立 run 工作目錄"
       last_reason: str
       last_stdout: str
 
-  def invoke_claude(run_dir: Path, prompt: str, config: DriverConfig) -> str: ...
+  class DriverTimeoutError(Exception): ...
 
-  def run_loop(run_dir: Path, mode: str, config: DriverConfig = DriverConfig()) -> DriverResult: ...
+  def invoke_claude(run_dir: Path, prompt: str, config: DriverConfig) -> str: ...  # raises DriverTimeoutError on timeout
+
+  def run_loop(run_dir: Path, mode: str, config: DriverConfig = DriverConfig()) -> DriverResult: ...  # catches DriverTimeoutError, returns Outcome.ERROR
   ```
 
 **注意**：`invoke_claude` 呼叫真正的 `claude` CLI（`-p`,
@@ -1027,7 +1029,7 @@ class DriverConfig:
     max_turns: int = 20
     max_wallclock_seconds: int = 3600
     claude_bin: str = "claude"
-    per_call_timeout_seconds: int = 900
+    per_call_timeout_seconds: int = 1800
     allowed_tools: str = "Bash,Edit,Write,Read,Glob,Grep,Skill,Task"
 
 
@@ -1037,6 +1039,10 @@ class DriverResult:
     turns_used: int
     last_reason: str
     last_stdout: str
+
+
+class DriverTimeoutError(Exception):
+    """單次 claude -p 呼叫超過 per_call_timeout_seconds。"""
 
 
 _E2E_PROMPT = "用 migration skill 處理這次遷移。"
@@ -1055,19 +1061,34 @@ def invoke_claude(run_dir, prompt: str, config: DriverConfig) -> str:
         "--allowedTools",
         config.allowed_tools,
     ]
-    result = subprocess.run(
-        cmd,
-        cwd=run_dir,
-        capture_output=True,
-        text=True,
-        timeout=config.per_call_timeout_seconds,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=run_dir,
+            capture_output=True,
+            text=True,
+            timeout=config.per_call_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DriverTimeoutError(
+            f"claude -p 逾時（超過 per_call_timeout_seconds={config.per_call_timeout_seconds} 秒）"
+        ) from exc
     try:
         data = json.loads(result.stdout)
     except json.JSONDecodeError:
         return result.stdout
     return data.get("result", result.stdout)
 ```
+
+**注意（Task 9 端到端驗收發現、修正過的內容）**：這個逾時處理是實測跑
+`fixtures/dept200-vb6` 撞到的真實問題——`migration-convert` 那一輪（跑
+test-writer/converter/reviewer 三個 subagent）花的時間比純推理的
+analyze/clarify 長很多，原本 `per_call_timeout_seconds=900`（15 分鐘）
+真的不夠，`subprocess.TimeoutExpired` 沒被接住直接讓整個 harness process
+崩潰。改成預設 1800 秒（30 分鐘），並用 `DriverTimeoutError` 包起來，讓
+`run_loop`（見下面 Step 7）可以優雅回報 `Outcome.ERROR`，不會讓程式崩潰
+——即使 1800 秒還是不夠，也要讓使用者拿到一份寫清楚原因的 `eval-report.md`，
+而不是一段 Python traceback。
 
 - [ ] **Step 4: 跑測試確認通過**
 
@@ -1145,6 +1166,31 @@ def test_run_loop_stops_at_max_turns(monkeypatch, tmp_path: Path):
     assert result.outcome == Outcome.ERROR
     assert "max_turns" in result.last_reason
     assert result.turns_used == 3
+
+
+def test_run_loop_returns_error_on_timeout_instead_of_crashing(monkeypatch, tmp_path: Path):
+    # regression test (found via real end-to-end validation in Task 9): a
+    # single claude -p call that legitimately takes longer than
+    # per_call_timeout_seconds (e.g. migration-convert dispatching three
+    # subagents per unit) must produce a graceful Outcome.ERROR, not an
+    # uncaught subprocess.TimeoutExpired that crashes the whole harness
+    # process.
+    from harness.driver import DriverTimeoutError
+
+    (tmp_path / "migration").mkdir()
+
+    def fake_invoke_that_times_out(run_dir, prompt, config):
+        raise DriverTimeoutError("claude -p 逾時（超過 per_call_timeout_seconds=1800 秒）")
+
+    monkeypatch.setattr("harness.driver.invoke_claude", fake_invoke_that_times_out)
+    monkeypatch.setattr("harness.driver.evaluate_gate", lambda state: GateDecision(Outcome.CONTINUE, "unused"))
+    monkeypatch.setattr("harness.driver.read_run_state", lambda run_dir: object())
+
+    result = run_loop(tmp_path, "e2e", DriverConfig(max_turns=5, max_wallclock_seconds=60))
+
+    assert result.outcome == Outcome.ERROR
+    assert "逾時" in result.last_reason
+    assert result.turns_used == 1
 ```
 
 - [ ] **Step 6: 跑測試確認失敗**
@@ -1169,7 +1215,11 @@ def run_loop(run_dir, mode: str, config: DriverConfig = DriverConfig()) -> Drive
         if time.monotonic() - start >= config.max_wallclock_seconds:
             return DriverResult(Outcome.ERROR, turns, "超過 max_wallclock_seconds", last_stdout)
 
-        last_stdout = invoke_claude(run_dir, prompt, config)
+        try:
+            last_stdout = invoke_claude(run_dir, prompt, config)
+        except DriverTimeoutError as exc:
+            turns += 1
+            return DriverResult(Outcome.ERROR, turns, str(exc), last_stdout)
         turns += 1
 
         state = read_run_state(run_dir)
@@ -1539,6 +1589,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--history-path", default="harness/history.tsv")
     parser.add_argument("--max-turns", type=int, default=20)
     parser.add_argument("--max-wallclock-seconds", type=int, default=3600)
+    parser.add_argument("--per-call-timeout-seconds", type=int, default=1800)
     args = parser.parse_args(argv)
 
     fixtures_root = Path(args.fixtures_root)
@@ -1551,7 +1602,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         provision_convert_only(args.fixture, run_dir, fixtures_root, templates_root)
 
-    config = DriverConfig(max_turns=args.max_turns, max_wallclock_seconds=args.max_wallclock_seconds)
+    config = DriverConfig(
+        max_turns=args.max_turns,
+        max_wallclock_seconds=args.max_wallclock_seconds,
+        per_call_timeout_seconds=args.per_call_timeout_seconds,
+    )
     result = run_loop(run_dir, args.mode, config)
 
     state = read_run_state(run_dir)
