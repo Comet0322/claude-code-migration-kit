@@ -9,9 +9,23 @@
 **Architecture:** 修改 `migration-clarify` 加一個標記檔觸發的 headless
 自決協定（不問人，改成自己判斷 + 寫 decision-log，卡住才停）；外部 Python
 腳本（`harness/`）用 `claude -p --output-format json --permission-mode
-bypassPermissions` 反覆呼叫、靠讀檔案狀態決定下一步（跟 `migration` 頂層
-router 同一套邏輯），在路由層級的 gate（pilot-signoff）用決定性規則自己核
-准或標記 `needs-human`；跑完比對 fixture 的 `test-config.json` 產出報告。
+acceptEdits --allowedTools <白名單>` 反覆呼叫、靠讀檔案狀態決定下一步（跟
+`migration` 頂層 router 同一套邏輯），在路由層級的 gate（pilot-signoff）
+用決定性規則自己核准或標記 `needs-human`；跑完比對 fixture 的
+`test-config.json` 產出報告。
+
+**Ruling（Task 1 執行期間跟使用者確認，取代原本設計）：** 不用
+`--permission-mode bypassPermissions`——這個 flag 在「一個 agent 呼叫另一
+個帶 bypassPermissions 的 claude」這個模式下會被 Claude Code Auto Mode 的
+安全分類器判定成「Create Unsafe Agents」擋下（在這個 plan 的實作過程中實
+測撞到）。改用 `--permission-mode acceptEdits` 搭配明確的
+`--allowedTools` 白名單：`Bash,Edit,Write,Read,Glob,Grep,Skill,Task`（涵
+蓋讀寫檔案、跑 build/test 用的 Bash、載入 domain skill 用的 Skill 工具、
+派送 migration-test-writer/migration-converter/migration-test-reviewer 三
+個 subagent 用的 Task 工具——若實作時發現這個 Claude Code 版本裡派送
+subagent 的工具名稱不是 `Task`，用實際名稱替換，並在該任務的報告裡註
+明）。真正的危險操作邊界一律靠 run 自己的 `.claude/settings.json` deny 規
+則擋，這點跟原本的設計精神一致，只是換了允許清單的表達方式。
 
 **Tech Stack:** Python 3（標準庫為主：`subprocess`/`json`/`pathlib`/
 `argparse`/`dataclasses`/`enum`/`shutil`/`csv`），測試用 `pytest`（開發期
@@ -868,6 +882,7 @@ git commit -m "feat: harness.provisioning 建立 run 工作目錄"
       max_wallclock_seconds: int = 3600
       claude_bin: str = "claude"
       per_call_timeout_seconds: int = 900
+      allowed_tools: str = "Bash,Edit,Write,Read,Glob,Grep,Skill,Task"
 
   @dataclass
   class DriverResult:
@@ -882,11 +897,20 @@ git commit -m "feat: harness.provisioning 建立 run 工作目錄"
   ```
 
 **注意**：`invoke_claude` 呼叫真正的 `claude` CLI（`-p`,
-`--output-format json`, `--permission-mode bypassPermissions`）。單元測試
-不會真的呼叫 claude——用 `monkeypatch` 替換 `subprocess.run`。這個 CLI 呼
-叫的 JSON 回傳格式（`result`/`is_error` 等欄位名稱）要在 Task 6 的手動驗
-證步驟對照真實輸出確認一次，如果實際欄位名稱不同，回頭調整
-`invoke_claude` 的解析邏輯。
+`--output-format json`, `--permission-mode acceptEdits`,
+`--allowedTools <config.allowed_tools>`）。**不要用
+`--permission-mode bypassPermissions`**——見這份 plan 開頭 Architecture 段
+落的 Ruling：這個 flag 在「agent 呼叫另一個帶 bypassPermissions 的
+claude」的模式下會被 Claude Code Auto Mode 的安全分類器擋下（Task 1 執行
+期間實測撞到）。`allowed_tools` 預設的白名單裡 `Task` 是派送
+migration-test-writer/migration-converter/migration-test-reviewer 三個
+subagent 用的工具——如果實作時發現這個 Claude Code 版本裡派送 subagent
+的工具名稱不是 `Task`，用 `claude --help` 或實際測試確認正確名稱，改掉
+這個預設值，並在報告裡註明改了什麼、為什麼。單元測試不會真的呼叫
+claude——用 `monkeypatch` 替換 `subprocess.run`。這個 CLI 呼叫的 JSON 回
+傳格式（`result`/`is_error` 等欄位名稱）要在 Task 9 的手動驗證步驟對照
+真實輸出確認一次，如果實際欄位名稱不同，回頭調整 `invoke_claude` 的解析
+邏輯。
 
 - [ ] **Step 1: 寫失敗測試（`invoke_claude` 組出正確指令、解析 JSON）**
 
@@ -926,7 +950,9 @@ def test_invoke_claude_builds_command_and_parses_result(monkeypatch, tmp_path: P
     assert "--output-format" in captured["cmd"]
     assert "json" in captured["cmd"]
     assert "--permission-mode" in captured["cmd"]
-    assert "bypassPermissions" in captured["cmd"]
+    assert "acceptEdits" in captured["cmd"]
+    assert "--allowedTools" in captured["cmd"]
+    assert "Bash,Edit,Write,Read,Glob,Grep,Skill,Task" in captured["cmd"]
     assert captured["cwd"] == tmp_path
 ```
 
@@ -957,6 +983,7 @@ class DriverConfig:
     max_wallclock_seconds: int = 3600
     claude_bin: str = "claude"
     per_call_timeout_seconds: int = 900
+    allowed_tools: str = "Bash,Edit,Write,Read,Glob,Grep,Skill,Task"
 
 
 @dataclass
@@ -979,7 +1006,9 @@ def invoke_claude(run_dir, prompt: str, config: DriverConfig) -> str:
         "--output-format",
         "json",
         "--permission-mode",
-        "bypassPermissions",
+        "acceptEdits",
+        "--allowedTools",
+        config.allowed_tools,
     ]
     result = subprocess.run(
         cmd,
