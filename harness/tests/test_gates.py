@@ -64,10 +64,18 @@ def test_needs_human_when_pilot_not_clean():
     assert decision.outcome == Outcome.NEEDS_HUMAN
 
 
-def test_needs_human_when_pilot_unit_still_pending_with_no_state_file():
-    # regression test: a unit listed in pilot-manifest.tsv with no state
-    # file yet (still pending) must NOT be silently skipped — it must block
-    # auto-signoff, not be treated as "not clean enough to matter".
+def test_continue_when_pilot_unit_still_pending_with_no_state_file_and_nothing_failed():
+    # regression test (found via real end-to-end validation in Task 9, not
+    # just unit-level review): a unit listed in pilot-manifest.tsv with no
+    # state file yet (still pending — migration-convert may not have been
+    # invoked for it at all yet) must NOT be silently treated as "clean"
+    # (must not auto-signoff), but it also must NOT be treated as "dirty,
+    # needs a human" — nothing has actually gone wrong, migration-convert
+    # just hasn't finished (or started) processing it. The correct action
+    # is to keep looping so the next `claude -p` turn lets the router call
+    # migration-convert. Only an actual FAILURE status should stop for
+    # human review — see test_needs_human_when_pilot_not_clean below for
+    # that case (unit "A" has status "fail-test").
     import tempfile
     from pathlib import Path
     state = _base_state(
@@ -84,7 +92,7 @@ def test_needs_human_when_pilot_unit_still_pending_with_no_state_file():
 
         decision = evaluate_gate(state)
 
-    assert decision.outcome == Outcome.NEEDS_HUMAN
+    assert decision.outcome == Outcome.CONTINUE
     assert decision.write_pilot_signoff is False
 
 

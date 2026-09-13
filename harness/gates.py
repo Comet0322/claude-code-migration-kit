@@ -41,18 +41,31 @@ def evaluate_gate(state: RunState) -> GateDecision:
     if state.pilot_manifest_exists and not state.pilot_signoff_exists:
         pilot_unit_ids = _pilot_unit_ids(state)
         pilot_units = [state.unit_states.get(u) for u in pilot_unit_ids]
+        any_failed = any(
+            u is not None and u.status in _FAILURE_STATUSES for u in pilot_units
+        )
         all_terminal_clean = bool(pilot_unit_ids) and all(
             u is not None and u.status in ("pass", "excluded") for u in pilot_units
         )
+        if any_failed or (state.rulebook_amendments_pending and not all_terminal_clean):
+            return GateDecision(
+                Outcome.NEEDS_HUMAN,
+                "pilot 裡有 unit 進入失敗狀態，或有待處理 rulebook-amendments，需要人類確認",
+            )
         if all_terminal_clean and not state.rulebook_amendments_pending:
             return GateDecision(
                 Outcome.CONTINUE,
                 "pilot 全數 pass/excluded 且無待處理 rulebook-amendments，自動簽核",
                 write_pilot_signoff=True,
             )
+        # 還有 pilot unit 停在 pending（migration-convert 可能還沒被呼叫過，
+        # 也可能才處理到一半）——這不是「不乾淨」，只是還沒跑完，繼續呼叫
+        # 下一輪讓 router 有機會叫 migration-convert 處理，不要在這裡卡住
+        # 等人類：只有真的出現失敗狀態或規則缺口待處理才需要人類，見上面
+        # 的判斷。
         return GateDecision(
-            Outcome.NEEDS_HUMAN,
-            "pilot 尚未全數 pass/excluded，或有待處理 rulebook-amendments，需要人類確認",
+            Outcome.CONTINUE,
+            "pilot 還有 unit 停在 pending（尚未被 migration-convert 處理過或處理到一半），繼續下一輪",
         )
 
     if state.manifest_rows:
