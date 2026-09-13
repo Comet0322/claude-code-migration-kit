@@ -312,12 +312,15 @@ _MANIFEST_FIELDS = ["unit_id", "source_path", "target_path"]
 _DEVIATION_FIELDS = ["timestamp", "unit_id", "category", "detail"]
 
 
-def _read_tsv(path: Path, fieldnames: list[str]) -> list[dict[str, str]]:
+def _read_tsv(path: Path, fieldnames: list[str], skip_header: bool = False) -> list[dict[str, str]]:
     if not path.exists():
         return []
     with path.open(newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh, fieldnames=fieldnames, delimiter="\t")
-        return list(reader)
+        lines = fh.readlines()
+    if skip_header and lines:
+        lines = lines[1:]
+    reader = csv.DictReader(lines, fieldnames=fieldnames, delimiter="\t")
+    return list(reader)
 
 
 def _read_unit_states(migration_dir: Path) -> dict[str, UnitState]:
@@ -378,17 +381,32 @@ def read_run_state(run_dir: Path) -> RunState:
     manifest_path = migration_dir / "manifest.tsv"
     return RunState(
         run_dir=run_dir,
-        manifest_rows=_read_tsv(manifest_path, _MANIFEST_FIELDS),
+        manifest_rows=_read_tsv(manifest_path, _MANIFEST_FIELDS, skip_header=True),
         pilot_manifest_exists=(migration_dir / "pilot-manifest.tsv").exists(),
         pilot_signoff_exists=(migration_dir / "pilot-signoff.txt").exists(),
         unit_states=_read_unit_states(migration_dir),
         integration_status=_read_integration_status(migration_dir),
-        deviation_rows=_read_tsv(migration_dir / "deviation-log.tsv", _DEVIATION_FIELDS),
+        deviation_rows=_read_tsv(migration_dir / "deviation-log.tsv", _DEVIATION_FIELDS, skip_header=False),
         rulebook_amendments_pending=_read_rulebook_amendments_pending(migration_dir),
         decision_log_last_status=_read_decision_log_last_status(migration_dir),
         ground_truth_tier=_read_ground_truth_tier(migration_dir),
     )
 ```
+
+**注意（Task 9 端到端驗收發現、修正過的內容）**：`manifest.tsv`（跟
+`pilot-manifest.tsv`——見下面 Task 3 的 `_pilot_unit_ids`）實際上**有**一
+行標題（`unit_id\tsource_path\ttarget_path`），這是 migration-clarify
+產出時的真實格式；但 `deviation-log.tsv`/`cost-log.tsv` 是純追加寫入的
+log（每次 `>>` 加一行資料，migration-convert 的 SKILL.md 從沒描述過要
+先寫一行標題），沒有標題列。原本的 `_read_tsv` 對兩種檔案一視同仁，沒有
+跳過標題列，導致 `manifest_rows` 永遠多一筆假的
+`{"unit_id": "unit_id", ...}`——這筆假資料在 `state.unit_states` 裡找不
+到對應的狀態檔，讓 gates.py 的「全部 unit 都完成了嗎」判斷永遠是
+`False`，整條 pipeline 因此永遠卡在「還沒完成」，即使真正的 unit 早就
+`pass` 了。手動跑真的 fixture 才踩到這個問題——所有既有的單元測試自己
+造的 TSV 內容都沒放標題列，跟真實情況不符，沒測出來。修法：`_read_tsv`
+加 `skip_header` 參數，`manifest.tsv` 讀取傳 `skip_header=True`，
+`deviation-log.tsv` 傳 `skip_header=False`（維持不變）。
 
 - [ ] **Step 4: 跑測試確認通過**
 
@@ -407,6 +425,7 @@ def test_populated_run_dir_parses_all_files(tmp_path: Path):
     state_dir.mkdir(parents=True)
 
     (migration_dir / "manifest.tsv").write_text(
+        "unit_id\tsource_path\ttarget_path\n"
         "UserSync\tlegacy/UserSync.bas\ttarget/user_sync.py\n",
         encoding="utf-8",
     )
@@ -607,15 +626,16 @@ def evaluate_gate(state: RunState) -> GateDecision:
 
 
 def _pilot_unit_ids(state: RunState) -> list[str]:
+    # pilot-manifest.tsv 有標題列（unit_id/source_path/target_path），跟
+    # manifest.tsv 同格式（Task 9 端到端驗收發現，見 state.py 的同類修
+    # 正）——第一行永遠跳過，不當成一個 unit id。
     pilot_path = state.run_dir / "migration" / "pilot-manifest.tsv"
     if not pilot_path.exists():
         return []
-    ids = []
-    for line in pilot_path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        ids.append(line.split("\t", 1)[0])
-    return ids
+    lines = [line for line in pilot_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if lines:
+        lines = lines[1:]
+    return [line.split("\t", 1)[0] for line in lines]
 ```
 
 - [ ] **Step 4: 跑測試確認通過**
@@ -648,7 +668,9 @@ def test_continue_and_auto_signoff_when_pilot_clean():
         run_dir = Path(tmp)
         migration_dir = run_dir / "migration"
         migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text("A\tx\ty\nB\tx\ty\n", encoding="utf-8")
+        (migration_dir / "pilot-manifest.tsv").write_text(
+            "unit_id\tsource_path\ttarget_path\nA\tx\ty\nB\tx\ty\n", encoding="utf-8"
+        )
         state.run_dir = run_dir
 
         decision = evaluate_gate(state)
@@ -669,7 +691,9 @@ def test_needs_human_when_pilot_not_clean():
         run_dir = Path(tmp)
         migration_dir = run_dir / "migration"
         migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text("A\tx\ty\n", encoding="utf-8")
+        (migration_dir / "pilot-manifest.tsv").write_text(
+            "unit_id\tsource_path\ttarget_path\nA\tx\ty\n", encoding="utf-8"
+        )
         state.run_dir = run_dir
 
         decision = evaluate_gate(state)
@@ -700,7 +724,9 @@ def test_continue_when_pilot_unit_still_pending_with_no_state_file_and_nothing_f
         run_dir = Path(tmp)
         migration_dir = run_dir / "migration"
         migration_dir.mkdir()
-        (migration_dir / "pilot-manifest.tsv").write_text("A\tx\ty\nB\tx\ty\n", encoding="utf-8")
+        (migration_dir / "pilot-manifest.tsv").write_text(
+            "unit_id\tsource_path\ttarget_path\nA\tx\ty\nB\tx\ty\n", encoding="utf-8"
+        )
         state.run_dir = run_dir
 
         decision = evaluate_gate(state)

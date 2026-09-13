@@ -2,9 +2,9 @@
   "expected_outcome": "needs-human",
   "expected_domain_skill": null,
   "expected_units": {
-    "Dept200Data": "excluded",
-    "Dept200Log": "excluded",
-    "UserSync": "pass"
+    "dept200_data": "excluded",
+    "dept200_log": "excluded",
+    "user_sync": "pass"
   },
-  "notes": "domain-200-delphi-java 跟 domain-200-delphi-python 共用同一份來源端 Fingerprint，純程式碼證據無法判斷目標語言，預期 clarify 的 headless 自決在這裡卡住（needs-human）——這是已知、刻意保留的設計，不是缺陷。Dept200Data.pas / Dept200Log.pas 是私有套件本身的原始碼，預期被標 excluded。"
+  "notes": "domain-200-delphi-java 跟 domain-200-delphi-python 共用同一份來源端 Fingerprint，純程式碼證據無法判斷目標語言，預期 clarify 的 headless 自決在這裡卡住（needs-human）——這是已知、刻意保留的設計，不是缺陷，預期在 domain skill 選定那一步就停，根本不會走到 manifest/pilot 階段，所以 expected_units 實際上不太會被用到比對。Dept200Data.pas / Dept200Log.pas 是私有套件本身的原始碼，預期被標 excluded。unit_id 比照 dept200-vb6/dept300-vb6 實測確認的 snake_case 慣例用「dept200_data」/「dept200_log」/「user_sync」，但 Delphi 端的 depmap_delphi.py 命名規則還沒有實際跑過驗證，這裡是類推，不是實測確認——之後真的跑這個 fixture 時要對照實際 modules.tsv 修正。"
 }
