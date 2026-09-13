@@ -12,6 +12,31 @@ description: >
 錯在這裡最貴，所以每個小節做完都要讓人看得到你依據什麼做的判斷，不要悶頭
 自己決定完就跳過。
 
+## Headless 測試協定（`migration/.headless-test` 標記檔存在時生效）
+
+這個 skill 平常靠 `AskUserQuestion` 讓真人在幾個地方做決定。如果
+`migration/.headless-test` 這個標記檔存在，代表你正在被自動化測試框架
+無人值守驅動，這種情況下：
+
+- 任何一節原本會呼叫 `AskUserQuestion`（或用任何其他方式停下來等對話回
+  覆）的地方，改成：依照這一節原本用來排推薦選項的同一套證據跟推理，直
+  接**採用你自己認為最合理的選項**，把完整的候選比較、理由、信心程度，
+  以追加（append）方式寫進 `migration/decision-log.md`（用
+  `## <節次標題>` 當這筆記錄的標題），然後照這個決定繼續往下做這一節，
+  不停下。這筆記錄結尾固定寫一行 `STATUS: decided`。
+- 例外：如果依照現有證據，你判斷任何一個選項都缺乏客觀依據支持（例如
+  Fingerprint 比對分數幾乎打平、或程式碼裡完全沒有能推斷目標形狀/UI 範
+  疇的線索），一樣把判斷跟理由寫進 `migration/decision-log.md`，結尾這
+  次寫 `STATUS: needs-human`，然後**停止整個 skill 呼叫**——這不是失
+  敗，是這個情境對真人來說也需要問，如實記錄比硬猜一個答案更有價值。
+- 標記檔不存在時（一般情況），以上都不適用，照原本的 `AskUserQuestion`
+  流程做。
+
+`migration/ground-truth-strategy.md` 不論標記檔存不存在，都要求**第一
+行**固定寫 `tier: environment` / `tier: snapshot` / `tier: inference`
+其中一個，其後才是原本要求的理由文字——這是格式補強，不改變原本三層擇一
+的判斷邏輯。
+
 ## 1. 選 domain skill（每個 repo 問一次，不是每個 unit）
 
 - 先檢查 `migration/domain-skill.txt` 是否已存在——這一輪對話裡如果已經選
@@ -22,8 +47,9 @@ description: >
   要自己憑空編一份領域知識出來頂替。
 - 找到候選：用 `migration/analysis/modules.tsv` 觀察到的匯入路徑、設定檔
   名稱等指紋，跟每個候選 domain skill 的 Fingerprint 小節比對，猜出最可能
-  符合的一個，排成推薦選項。用 AskUserQuestion 問人類要用哪一個（列出候
-  選 + 推薦值 + 理由）。
+  符合的一個，排成推薦選項。若 `migration/.headless-test` 不存在，用
+  `AskUserQuestion` 問人類要用哪一個（列出候選 + 推薦值 + 理由）；標記檔
+  存在則依照上面「Headless 測試協定」處理。
 - 選定後寫入 `migration/domain-skill.txt`（單行，domain skill 名稱）。
 
 批次情境的提醒：這個檔案是**這個 repo 自己的紀錄**，不是跨 repo 共用的。同
@@ -72,6 +98,13 @@ fpc` 把編譯器裝到機器上——這是不可接受的，裝軟體/改環�
 三層擇一寫進 `migration/ground-truth-strategy.md`，測試撰寫 agent 會讀這
 份文件決定怎麼做，不會自己判斷、更不會自己修環境。
 
+headless 模式下（`migration/.headless-test` 存在），如果第 1 層（執行環
+境）探測失敗、且 `migration/behavior-snapshots/` 沒有可用素材，**預設直
+接採用 tier=`inference`**，理由寫「自動化測試環境，無來源端執行環境或行
+為快照可用」，記進 `migration/ground-truth-strategy.md`，不停下——這是刻
+意放寬的測試預設值，跟一般情境「兩者都沒有才是最後手段、需要明確人類同
+意」的原則不同，只在標記檔存在時生效。
+
 ## 4. 跟人 draft rulebook
 
 從 domain skill 的「語法轉換/library 替換規則」起手當種子——那些已經是決
@@ -112,7 +145,9 @@ Rulebook 完成後在這個 session 裡就是唯讀的——轉換階段的三�
 如果選定的 domain skill 的「模板專案」節列出不止一個選項，用
 `AskUserQuestion` 跟人類確認**這次遷移（這個 `migration/` 目錄、這份
 manifest）**是哪一種形狀——跟第 1 節選 domain skill 一樣，一次遷移裡的
-manifest 只會是一種形狀，不是逐 unit 各自判斷。如果人類告訴你這次遷移的
+manifest 只會是一種形狀，不是逐 unit 各自判斷。（若
+`migration/.headless-test` 存在，依照「Headless 測試協定」處理，不
+呼叫 `AskUserQuestion`。）如果人類告訴你這次遷移的
 manifest 裡真的混了兩種形狀，把這件事回報給人類：這代表這個 repo 該拆成
 兩次獨立的遷移實例（各自一份 `migration/` 目錄），而不是在同一份
 manifest 裡混搭。
@@ -181,7 +216,9 @@ skill 沒辦法幫你預先決定，一定要問人類。
 代表選定的 domain skill 要有對應的目標端 UI 框架知識，模板專案/新語言
 library 文件都要涵蓋，沒有的話跟第 6 節一樣：回報給人類，domain skill
 需要補強或選錯了）」還是「捨棄 UI，只轉核心邏輯」。跟第 7 節的目標端形
-狀決定一樣，一次遷移整批只問一次，不是逐 unit 各自判斷。
+狀決定一樣，一次遷移整批只問一次，不是逐 unit 各自判斷。（若
+`migration/.headless-test` 存在，依照「Headless 測試協定」處理，不
+呼叫 `AskUserQuestion`。）
 
 **捨棄 UI**：這些 unit 標記 `excluded`（跟私有套件排除用同一個機制，
 `last_note` 寫「UI 層，人類決定不遷移，見 RULEBOOK.md」），並在
