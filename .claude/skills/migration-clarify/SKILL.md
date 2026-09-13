@@ -24,8 +24,8 @@ description: >
   以追加（append）方式寫進 `migration/decision-log.md`（用
   `## <節次標題>` 當這筆記錄的標題），然後照這個決定繼續往下做這一節，
   不停下。這筆記錄結尾固定寫一行 `STATUS: decided`。
-- 例外：如果依照現有證據，你判斷任何一個選項都缺乏客觀依據支持（例如
-  Fingerprint 比對分數幾乎打平、或程式碼裡完全沒有能推斷目標形狀/UI 範
+- 例外：如果依照現有證據，你判斷任何一個選項都缺乏客觀依據支持（例如候
+  選 domain skill 之間分不出高下、或程式碼裡完全沒有能推斷目標形狀/UI 範
   疇的線索），一樣把判斷跟理由寫進 `migration/decision-log.md`，結尾這
   次寫 `STATUS: needs-human`，然後**停止整個 skill 呼叫**——這不是失
   敗，是這個情境對真人來說也需要問，如實記錄比硬猜一個答案更有價值。
@@ -45,17 +45,19 @@ description: >
   找，`domain-template` 本身不算數，跳過）。如果一個都找不到，**停下來告
   訴人類要先準備一個**——可以複製 `domain-template` skill 改名填內容——不
   要自己憑空編一份領域知識出來頂替。
-- 找到候選：用 `migration/analysis/modules.tsv` 觀察到的匯入路徑、設定檔
-  名稱等指紋，跟每個候選 domain skill 的 Fingerprint 小節比對，猜出最可能
-  符合的一個，排成推薦選項。若 `migration/.headless-test` 不存在，用
-  `AskUserQuestion` 問人類要用哪一個（列出候選 + 推薦值 + 理由）；標記檔
-  存在則依照上面「Headless 測試協定」處理。
+- 找到候選：直接讀這個 repo 的實際程式碼（`migration/analysis/modules.tsv`
+  觀察到的匯入路徑、設定檔名稱、私有套件參照等），跟每個候選 domain
+  skill 的「這個 domain skill 涵蓋的應用類型」「私有套件文件」兩節描述
+  比對，判斷最符合的一個，排成推薦選項。若 `migration/.headless-test`
+  不存在，用 `AskUserQuestion` 問人類要用哪一個（列出候選 + 推薦值 + 理
+  由）；標記檔存在則依照上面「Headless 測試協定」處理。
 - 選定後寫入 `migration/domain-skill.txt`（單行，domain skill 名稱）。
 
 批次情境的提醒：這個檔案是**這個 repo 自己的紀錄**，不是跨 repo 共用的。同
-批次的下一個老舊程式實例通常是另一個獨立的 repo/checkout，那邊會是全新的
-`migration/` 目錄，一樣要問一次——只是因為指紋比對通常會猜對同一個 domain
-skill，實際上人類多半只是確認推薦值，不是重新想一次。
+一批「同性質」的老舊程式（用同一個 domain skill/template 處理）通常拆成多
+個各自獨立的 repo/checkout，每一個都是全新的 `migration/` 目錄，一樣要問
+一次——不是自動幫每個 repo 各自判斷、不經確認分頭跑，只是因為同一批的程式
+碼特徵通常很像，人類多半只是確認推薦值，不是重新想一次。
 
 ## 2. 載入 domain skill 內容
 
@@ -122,29 +124,17 @@ Rulebook 完成後在這個 session 裡就是唯讀的——轉換階段的三�
 但源語言可以含糊帶過的地方（ownership、nullability、介面契約），寫
 `migration/inventory.tsv`。這是攤開讓 agent 查的表，不是要人一條條讀完。
 
-## 6. Domain skill 假設 vs 實際程式碼比對
-
-如果選定的 domain skill 有填 Fingerprint 小節，逐條跟這個 repo 的實際程式
-碼核對：
-
-- 落差不大（少數幾個檔案不符合）：當一般 rulebook 修訂處理，寫進
-  deviation log 區塊，繼續往下做。
-- 落差嚴重（domain skill 的核心假設整個對不上，例如完全找不到假設的私有套
-  件）：停下來,回報給人類,問是不是選錯 domain skill 或這個 domain skill 需
-  要更新,不要硬套下去。
-
-沒填 Fingerprint 的 domain skill 就跳過這節,不強制。
-
-## 7. 決定目標端專案形狀（選填，domain skill 模板專案列出多於一種選項才需要）
+## 6. 決定目標端專案形狀（選填，domain skill 模板專案列出多於一種選項才需要）
 
 有些目標語言的專案模板不是單一慣例——例如同樣目標 Python，公司內部同時
 有「FastAPI 服務」跟「背景 ETL 批次」兩種形狀，各自的目錄結構、進入點、
-整合檢查方式都不一樣，對應到不同的模板 skill（例如
-`python-corplib-fastapi` / `python-corplib-etl`）。
+整合檢查方式都不一樣，對應到同一個模板 skill 底下不同的節（例如
+`python-template` 的「專案形狀：FastAPI 常駐服務」/「專案形狀：背景 ETL
+批次」兩節）。
 
 如果選定的 domain skill 的「模板專案」節列出不止一個選項，用
 `AskUserQuestion` 跟人類確認**這次遷移（這個 `migration/` 目錄、這份
-manifest）**是哪一種形狀——跟第 1 節選 domain skill 一樣，一次遷移裡的
+manifest）**是哪一種形狀——跟「選 domain skill」那節一樣，一次遷移裡的
 manifest 只會是一種形狀，不是逐 unit 各自判斷。（若
 `migration/.headless-test` 存在，依照「Headless 測試協定」處理，不
 呼叫 `AskUserQuestion`。）如果人類告訴你這次遷移的
@@ -152,7 +142,7 @@ manifest 裡真的混了兩種形狀，把這件事回報給人類：這代表�
 兩次獨立的遷移實例（各自一份 `migration/` 目錄），而不是在同一份
 manifest 裡混搭。
 
-選定後寫入 `migration/target-shape.txt`（單行，模板 skill 名稱）。第 9
+選定後寫入 `migration/target-shape.txt`（單行，模板 skill 名稱）。第 8
 節 scaffold 用哪個模板骨架、`migration-convert` 呼叫三個 subagent 時要
 餵哪份模板知識，都由這裡決定。
 
@@ -160,7 +150,7 @@ domain skill「模板專案」節如果只寫了一個「同 skill `<名稱>`」
 選項），代表這個目標語言在這批應用裡沒有形狀分歧，跳過這節，不用問人
 類，也不用寫 `target-shape.txt`。
 
-## 8. 複製來源到本地、補 target_path、產出完整 manifest
+## 7. 複製來源到本地、補 target_path、產出完整 manifest
 
 讀 `migration/analysis/manifest-draft.tsv`——它的 `source_path` 是
 migration-analyze 掃描時看到的位置，不保證就在這次遷移的執行根目錄底
@@ -175,7 +165,7 @@ manifest-draft.tsv 裡的相對路徑結構；來源分散在很多層目錄、�
 後被更新、搬家、甚至刪除，這次遷移已經做的分析跟決策依然完整可信,不會
 突然找不到檔案或（更危險）不知不覺對到別的版本。
 
-複製完成後，依模板專案的命名慣例（若第 7 節有決定形狀，以
+複製完成後，依模板專案的命名慣例（若「決定目標端專案形狀」節有決定形狀，以
 `target-shape.txt` 指到的模板 skill 為準；沒有形狀分歧就直接用 domain
 skill 的模板專案節）逐列決定 target_path，寫 `migration/manifest.tsv`
 （欄位：`unit_id, source_path, target_path`，`source_path` 一律指向複製
@@ -214,9 +204,10 @@ skill 沒辦法幫你預先決定，一定要問人類。
 如果 `migration/analysis/modules.tsv` 裡有 unit 看起來是 UI 層，用
 `AskUserQuestion` 問人類這次遷移整批要「保留 UI（連同 UI 一起轉換——這
 代表選定的 domain skill 要有對應的目標端 UI 框架知識，模板專案/新語言
-library 文件都要涵蓋，沒有的話跟第 6 節一樣：回報給人類，domain skill
-需要補強或選錯了）」還是「捨棄 UI，只轉核心邏輯」。跟第 7 節的目標端形
-狀決定一樣，一次遷移整批只問一次，不是逐 unit 各自判斷。（若
+library 文件都要涵蓋，沒有的話直接回報給人類：這個 domain skill 需要補
+強 UI 框架知識，或者選錯了）」還是「捨棄 UI，只轉核心邏輯」。跟「決定
+目標端專案形狀」節的決定一樣，一次遷移整批只問一次，不是逐 unit 各自判
+斷。（若
 `migration/.headless-test` 存在，依照「Headless 測試協定」處理，不
 呼叫 `AskUserQuestion`。）
 
@@ -232,19 +223,20 @@ library 文件都要涵蓋，沒有的話跟第 6 節一樣：回報給人類，
 沒有偵測到任何 UI 層 unit（例如這批本來就是純批次/CLI 工具，像部門
 200/300 這批模擬情境）就跳過這節，不用問人類。
 
-## 9. Scaffold 目標專案
+## 8. Scaffold 目標專案
 
-依模板專案（同第 8 節，若有 `target-shape.txt` 就用它指到的模板 skill）
+依模板專案（同「複製來源到本地、補 target_path、產出完整 manifest」
+節，若有 `target-shape.txt` 就用它指到的模板 skill）
 把目標路徑的骨架建出來(目錄結構、build 設定檔)。已經存在的部分不要覆
 蓋——這個步驟該是幂等的,重跑不該砍掉已經轉換好的東西。
 
 如果模板專案小節宣告了目標語言側需要的外部套件：用唯讀方式確認(`test -d
 node_modules`、`pip show <pkg>` 之類)是不是已經裝好。沒裝好就**停下來告
-訴人類要先手動執行哪個安裝指令**，不要自己執行安裝——這條跟第 3 節「取
-得 ground truth 的方式」裡「不能自己裝東西」是同一條紅線，只是換成目標
+訴人類要先手動執行哪個安裝指令**，不要自己執行安裝——這條跟「取得
+ground truth 的方式」節裡「不能自己裝東西」是同一條紅線，只是換成目標
 語言側。人類裝好之後你再重跑這一節確認。
 
-## 10. 產生 pilot 子集
+## 9. 產生 pilot 子集
 
 從 `migration/manifest.tsv` 挑 2-3 個 unit,優先挑 `risk-notes.tsv` 標
 `high` 的,再搭一個典型/普通的,寫 `migration/pilot-manifest.tsv`。這個子集
@@ -253,7 +245,7 @@ node_modules`、`pip show <pkg>` 之類)是不是已經裝好。沒裝好就**�
 
 ## 結束條件
 
-以上十節都做完就**一定要停**,回報完整產物清單(domain skill、
+以上九節都做完就**一定要停**,回報完整產物清單(domain skill、
 ground-truth-strategy、target-shape（如果有做這節）、rulebook、
 inventory、mismatch 報告如果有、manifest、pilot-manifest、scaffold 狀
 態)。

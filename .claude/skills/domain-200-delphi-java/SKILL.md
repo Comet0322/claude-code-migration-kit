@@ -2,9 +2,9 @@
 name: domain-200-delphi-java
 description: >
   [模擬情境] 涵蓋部門 200 的 Delphi 舊應用，目標語言 Java。來源端知識（私
-  有套件、Fingerprint、執行環境）共用 skill `legacy-200-delphi`（跟
+  有套件、執行環境）共用 skill `legacy-200-delphi`（跟
   domain-200-delphi-python 是同一批來源）。目標端知識共用 skill
-  `java-corplib`（跟 domain-200-vb-java 共用同一套目標 Java library）。
+  `java-template`（跟 domain-200-vb-java 共用同一套目標 Java library）。
 ---
 
 # Domain skill 模板
@@ -26,13 +26,13 @@ description: >
 
 ## 模板專案
 
-同 skill `java-corplib`。
+同 skill `java-template`。
 
 ## 語法轉換 / library 替換規則
 
-來源見 skill `legacy-200-delphi`、目標見 skill `java-corplib`：
+來源見 skill `legacy-200-delphi`、目標見 skill `java-template`：
 
-| Delphi（legacy-200-delphi） | Java（java-corplib） | 備註 |
+| Delphi（legacy-200-delphi） | Java（java-template） | 備註 |
 |---|---|---|
 | `TDBConnection.Create(ReadIniConnString('app.ini'))` | `Database.fromEnv()` | DSN 來源從 `app.ini` 改成環境變數 `CORPLIB_DB_DSN`，由部署設定填入，轉換後不再讀 ini。 |
 | `Conn.Query(sql, [...])`（無交易） | `try (var conn = db.session()) { conn.fetchAll(sql, Map.of(...)); }` | 具名參數風格一致，陣列 `['k', v, ...]` 換成 `Map.of("k", v, ...)`。 |
@@ -42,12 +42,8 @@ description: >
 
 ## 新語言 library 文件
 
-同 skill `java-corplib`。
+同 skill `java-template`。
 
 ## 測試 / build 方法
 
-同 skill `java-corplib`。
-
-## Fingerprint（選填，給落差比對用）
-
-同 skill `legacy-200-delphi`。
+同 skill `java-template`。

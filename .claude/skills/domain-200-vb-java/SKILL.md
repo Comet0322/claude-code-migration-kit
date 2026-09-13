@@ -4,7 +4,7 @@ description: >
   [模擬情境] 涵蓋部門 200 的 VB6 舊應用（私有套件是單一封裝好的 COM
   library `Dept200Common.dll`，DB 連線跟 logging 都從這一個 library
   來，不是兩個各自獨立的套件），目標語言 Java。目標端知識（模板專案、
-  library 文件、測試/build 方法）共用 skill `java-corplib`（跟
+  library 文件、測試/build 方法）共用 skill `java-template`（跟
   domain-200-delphi-java 共用同一套目標 Java library）。
 ---
 
@@ -19,13 +19,13 @@ description: >
 reference（`Object=` 那行）——這是一個封裝好的**單一** library，`clsDBConn`
 （DB）跟 `clsLogger`（logging）都從同一個 DLL 來，不是分開的兩個套件。跟
 `domain-300-vb-python` 涵蓋的部門 300 VB6 應用是不同的私有套件生態，不能
-共用彼此的 Fingerprint / 私有套件文件（同樣是 VB6，但兩個部門各自維護一
-套私有 library）。
+共用彼此的私有套件文件（同樣是 VB6，但兩個部門各自維護一套私有
+library）。
 
 ## 私有套件文件
 
 `Dept200Common.dll`（早期繫結 COM component，一個 DLL 裡有 `clsDBConn` 跟
-`clsLogger` 兩個 class，對應到 `java-corplib` 的 `com.company.corplib.db`
+`clsLogger` 兩個 class，對應到 `java-template` 的 `com.company.corplib.db`
 / `com.company.corplib.logging` 這種「一個 library、兩個子模組」的形
 狀）：
 
@@ -60,11 +60,11 @@ Logger.LogError "db timeout", "unit_id=u123"
 
 ## 模板專案
 
-同 skill `java-corplib`。
+同 skill `java-template`。
 
 ## 語法轉換 / library 替換規則
 
-| VB6（`Dept200Common`） | Java（`java-corplib`） | 備註 |
+| VB6（`Dept200Common`） | Java（`java-template`） | 備註 |
 |---|---|---|
 | `Conn.Query(sql, Array(...))`（位置參數 `?`） | `conn.fetchAll(sql, Map.of(...))`（具名 `:param`） | SQL 裡的 `?` 要依序換成 `:paramN`，並補上對應的 key 名稱——不是單純照抄 SQL 字串。 |
 | `Conn.BeginTrans` / `CommitTrans` / `RollbackTrans` | `try (var tx = db.transaction()) { ...; tx.commit(); }` | 只有原始碼裡看得到手動呼叫 `BeginTrans` 的路徑才對應 `transaction()`；沒有交易包起來的單純 `Query`/`Execute` 對應 `db.session()`。 |
@@ -73,14 +73,8 @@ Logger.LogError "db timeout", "unit_id=u123"
 
 ## 新語言 library 文件
 
-同 skill `java-corplib`。
+同 skill `java-template`。
 
 ## 測試 / build 方法
 
-同 skill `java-corplib`。
-
-## Fingerprint（選填，給落差比對用）
-
-- `.vbp` 專案檔裡有 `Object={...}#Dept200Common#...` 這行 COM
-  reference（單一 library，不會另外看到獨立的 logging 模組）。
-- 根目錄有 `app.ini`，含 `[DB]` 區段跟 `ConnString=`。
+同 skill `java-template`。

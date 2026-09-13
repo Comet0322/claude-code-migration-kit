@@ -3,10 +3,10 @@ name: domain-300-vb-python
 description: >
   [模擬情境] 涵蓋部門 300 的 VB6 舊應用（私有套件是單一封裝好的 COM
   library `CorpUtil300.dll`，DB 連線跟 logging 都從這一個 library 來，
-  logging 走 Windows Event Log），目標語言 Python。目標端 DB/logging 用
-  法共用 skill `python-corplib`；專案形狀（FastAPI 服務 / ETL 批次）依實
-  例而定，見 `python-corplib-fastapi` / `python-corplib-etl`（跟
-  domain-200-delphi-python 共用同一組目標 Python 形狀選項）。
+  logging 走 Windows Event Log），目標語言 Python。目標端 library 文件跟
+  專案形狀模板（FastAPI 服務 / ETL 批次，依實例而定）都在 skill
+  `python-template` 裡（跟 domain-200-delphi-python 共用同一組目標
+  Python 形狀選項）。
 ---
 
 # Domain skill 模板
@@ -21,12 +21,12 @@ reference——這是一個封裝好的**單一** library，`clsConn`（DB）跟
 `clsEventLogger`（logging）都從同一個 DLL 來。程式碼裡會出現存取
 `HKLM\Software\Dept300\DB` 這把 registry key。跟 `domain-200-vb-java` 涵
 蓋的部門 200 VB6 應用是不同的私有套件生態（同樣是 VB6，但兩個部門各自維
-護一套私有 library），不能共用彼此的 Fingerprint / 私有套件文件。
+護一套私有 library），不能共用彼此的私有套件文件。
 
 ## 私有套件文件
 
 `CorpUtil300.dll`（早期繫結 COM component，一個 DLL 裡有 `clsConn`
-（ODBC）跟 `clsEventLogger` 兩個 class，對應到 `python-corplib` 的
+（ODBC）跟 `clsEventLogger` 兩個 class，對應到 `python-template` 的
 `corplib.db` / `corplib.logging` 這種「一個 library、兩個子模組」的形
 狀）：
 
@@ -62,14 +62,14 @@ Logger.Write evtError, "db timeout", "unit=u456"
 ## 模板專案
 
 這批應用的目標 Python 專案可能是 FastAPI 服務或背景 ETL 批次，兩者擇
-一，由 `migration-clarify` 跟人類確認（見其第 7 節），寫進
+一，由 `migration-clarify` 跟人類確認（見「決定目標端專案形狀」節），寫進
 `migration/target-shape.txt`：
-- 同 skill `python-corplib-fastapi`
-- 同 skill `python-corplib-etl`
+- 同 skill `python-template` 的「專案形狀：FastAPI 常駐服務」節
+- 同 skill `python-template` 的「專案形狀：背景 ETL 批次」節
 
 ## 語法轉換 / library 替換規則
 
-| VB6（`CorpUtil300`） | Python（`python-corplib`） | 備註 |
+| VB6（`CorpUtil300`） | Python（`python-template`） | 備註 |
 |---|---|---|
 | `Conn.Connect`（讀 registry） | `Database.from_env()` | DSN 來源從 registry 改成環境變數 `CORPLIB_DB_DSN`。 |
 | `Conn.Exec(sql, Array(...))` | `with db.session() as conn: conn.fetch_all(sql, {...})` | 位置 `?` 依序換成具名 `:param`，順序要對應轉換。 |
@@ -79,17 +79,10 @@ Logger.Write evtError, "db timeout", "unit=u456"
 
 ## 新語言 library 文件
 
-同 skill `python-corplib`。
+同 skill `python-template` 的「corplib 使用方式」節。
 
 ## 測試 / build 方法
 
-隨模板形狀決定，見 `migration/target-shape.txt` 指到的
-`python-corplib-fastapi` 或 `python-corplib-etl`（各自有自己的測試/build
-方法，不再重複貼）。
-
-## Fingerprint（選填，給落差比對用）
-
-- `.vbp` 專案檔裡有 `Object={...}#CorpUtil300#...` 這行 COM reference
-  （單一 library，不會另外看到獨立的 logging 模組）。
-- 程式碼裡出現存取 `HKLM\Software\Dept300\DB` 這把 registry key（例如
-  `GetSetting`/`SaveSetting` 呼叫，或直接呼叫 `RegOpenKeyEx` 系列 API）。
+隨模板形狀決定，見 `migration/target-shape.txt` 指到的形狀，對應
+`python-template` 的「測試 / build 方法（FastAPI）」或「測試 / build
+方法（ETL 批次）」節（不再重複貼）。

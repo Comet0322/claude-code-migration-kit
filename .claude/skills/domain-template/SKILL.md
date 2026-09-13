@@ -20,14 +20,14 @@ domain skill 裡任何一節，只要內容跟其他已存在的 domain skill **
 skill `<skill 名稱>`」。這件事有兩個方向，不要假設只有其中一種：
 
 - **目標端共用**：不同部門、不同來源語言，但轉換到同一種目標語言、用同
-  一套內部 library/慣例——例如 `python-corplib`、`java-corplib`，「模板
-  專案」「新語言 library 文件」「測試 / build 方法」三節指向它。
+  一套內部 library/慣例——例如 `python-template`、`java-template`，「模
+  板專案」「新語言 library 文件」「測試 / build 方法」三節指向它。
 - **來源端共用**：同一份來源程式碼（同部門、同來源語言）被規劃/已經遷移
   到不止一種目標語言——例如部門 200 的 Delphi 舊應用同時有
   `domain-200-delphi-java` 跟 `domain-200-delphi-python` 兩個 domain
   skill，「這個 domain skill 涵蓋的應用類型」「私有套件文件」「來源語言
-  執行環境」「Fingerprint」這幾節其實是同一份事實，抽成一個獨立 skill
-  （例如 `legacy-200-delphi`），兩個 domain skill 都指向它。
+  執行環境」這幾節其實是同一份事實，抽成一個獨立 skill（例如
+  `legacy-200-delphi`），兩個 domain skill 都指向它。
 
 抽出來的獨立 skill 都寫清楚可以觸發的 `description`——目標端共用 skill
 通常在 migration 情境之外也有用（任何人要寫符合公司規範的這個語言的程式
@@ -51,24 +51,26 @@ subagent——subagent 本身沒有 Skill 工具權限，所以是 clarify/conve
 ### 目標端不是單一慣例時：「模板專案」節列多個選項
 
 同一種目標語言在公司內部可能不是只有一套專案慣例——例如目標 Python 同時
-有「FastAPI 服務」跟「背景 ETL 批次」兩種形狀。這種情況下**不要**把兩種
-形狀硬塞進同一個目標端共用 skill，而是拆成兩個獨立 skill（例如
-`python-corplib-fastapi`、`python-corplib-etl`），DB/logging 這類真正跨
-形狀共用的部分留在更底層的 skill（例如 `python-corplib`，只放 library
-用法，不放專案骨架），兩個形狀 skill 各自引用它。
+有「FastAPI 服務」跟「背景 ETL 批次」兩種形狀。這種情況下**不要**拆成多
+個獨立 skill，而是在同一個目標端共用 skill 裡用不同小節分別放（例如
+`python-template` 底下「corplib 使用方式」放真正跨形狀共用的 DB/logging
+用法，「專案形狀：FastAPI 常駐服務」跟「專案形狀：背景 ETL 批次」各自一
+節放骨架/進入點/測試build方法）——同一套目標端知識放在同一個 skill 裡分
+節，不要分散成好幾個 skill，讀的人才不用同時開好幾個 skill 才拼得出完整
+的目標端知識。
 
 domain skill 的「模板專案」節這時改寫成列出選項而不是單一「同 skill
-`<名稱>`」，例如：
+`<名稱>`」，指到同一個 skill 底下不同的節，例如：
 
 ```
 這批應用的目標 Python 專案可能是 FastAPI 服務或背景 ETL 批次，兩者擇一：
-- 同 skill `python-corplib-fastapi`
-- 同 skill `python-corplib-etl`
+- 同 skill `python-template` 的「專案形狀：FastAPI 常駐服務」節
+- 同 skill `python-template` 的「專案形狀：背景 ETL 批次」節
 ```
 
 `migration-clarify` 看到列出多個選項時，會用 `AskUserQuestion` 跟人類確
 認這次遷移（這份 manifest）要用哪一種、寫進 `migration/target-shape.txt`
-（見 `migration-clarify` 第 7 節）。只有一種形狀就直接寫單一「同 skill
+（見 `migration-clarify` 的「決定目標端專案形狀」節）。只有一種形狀就直接寫單一「同 skill
 `<名稱>`」，不要為了「以防萬一」硬列多個選項。
 
 ## 這個 domain skill 涵蓋的應用類型
@@ -147,10 +149,3 @@ migration-clarify 會照這個幫每個 unit 決定 target_path，並把骨架�
 
 [這批應用怎麼跑測試、怎麼 build——具體指令。給 migration-test-reviewer 用，
 也是轉換 skill guardrail 檢查時要確認存在的東西。]
-
-## Fingerprint（選填，給落差比對用）
-
-[列出這個 domain skill 假設成立的具體事實，例如「應該找得到 import
-'legacypkg/foo'」「build 設定檔應該是 xxx.cfg」。migration-clarify 會拿實際
-程式碼逐條比對，落差記錄到 migration/domain-mismatch.md，不會默默忽略。沒
-填這節就跳過比對，不強制。]
