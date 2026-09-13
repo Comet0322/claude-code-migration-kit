@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+
+from harness.state import RunState
+
+
+class Outcome(str, Enum):
+    CONTINUE = "continue"
+    SUCCESS = "success"
+    NEEDS_HUMAN = "needs-human"
+    ERROR = "error"
+
+
+@dataclass
+class GateDecision:
+    outcome: Outcome
+    reason: str
+    write_pilot_signoff: bool = False
+
+
+_FAILURE_STATUSES = {"fail-conversion", "fail-test", "rule-gap"}
+
+
+def evaluate_gate(state: RunState) -> GateDecision:
+    if state.decision_log_last_status == "needs-human":
+        return GateDecision(
+            Outcome.NEEDS_HUMAN,
+            "migration-clarify 在 decision-log.md 記錄 needs-human：缺乏客觀依據自決",
+        )
+
+    if state.rulebook_amendments_pending and any(
+        u.status in _FAILURE_STATUSES for u in state.unit_states.values()
+    ):
+        return GateDecision(
+            Outcome.NEEDS_HUMAN,
+            "有 unit 卡在失敗狀態且 rulebook-amendments.md 有待處理項目",
+        )
+
+    if state.pilot_manifest_exists and not state.pilot_signoff_exists:
+        pilot_unit_ids = _pilot_unit_ids(state)
+        pilot_units = [state.unit_states[u] for u in pilot_unit_ids if u in state.unit_states]
+        all_terminal_clean = pilot_units and all(
+            u.status in ("pass", "excluded") for u in pilot_units
+        )
+        if all_terminal_clean and not state.rulebook_amendments_pending:
+            return GateDecision(
+                Outcome.CONTINUE,
+                "pilot 全數 pass/excluded 且無待處理 rulebook-amendments，自動簽核",
+                write_pilot_signoff=True,
+            )
+        return GateDecision(
+            Outcome.NEEDS_HUMAN,
+            "pilot 尚未全數 pass/excluded，或有待處理 rulebook-amendments，需要人類確認",
+        )
+
+    if state.manifest_rows:
+        all_done = all(
+            state.unit_states.get(row["unit_id"], None) is not None
+            and state.unit_states[row["unit_id"]].status in ("pass", "excluded")
+            for row in state.manifest_rows
+        )
+        if all_done:
+            if state.integration_status == "pass":
+                return GateDecision(Outcome.SUCCESS, "manifest 全數 pass/excluded 且整合檢查 pass")
+            if state.integration_status == "fail":
+                return GateDecision(Outcome.NEEDS_HUMAN, "整合檢查失敗，需要人類判斷退回哪個 unit")
+
+    return GateDecision(Outcome.CONTINUE, "尚未到終止條件，繼續下一輪")
+
+
+def _pilot_unit_ids(state: RunState) -> list[str]:
+    pilot_path = state.run_dir / "migration" / "pilot-manifest.tsv"
+    if not pilot_path.exists():
+        return []
+    ids = []
+    for line in pilot_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        ids.append(line.split("\t", 1)[0])
+    return ids
