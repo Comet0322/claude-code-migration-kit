@@ -40,9 +40,9 @@ def evaluate_gate(state: RunState) -> GateDecision:
 
     if state.pilot_manifest_exists and not state.pilot_signoff_exists:
         pilot_unit_ids = _pilot_unit_ids(state)
-        pilot_units = [state.unit_states[u] for u in pilot_unit_ids if u in state.unit_states]
-        all_terminal_clean = pilot_units and all(
-            u.status in ("pass", "excluded") for u in pilot_units
+        pilot_units = [state.unit_states.get(u) for u in pilot_unit_ids]
+        all_terminal_clean = bool(pilot_unit_ids) and all(
+            u is not None and u.status in ("pass", "excluded") for u in pilot_units
         )
         if all_terminal_clean and not state.rulebook_amendments_pending:
             return GateDecision(

@@ -64,6 +64,30 @@ def test_needs_human_when_pilot_not_clean():
     assert decision.outcome == Outcome.NEEDS_HUMAN
 
 
+def test_needs_human_when_pilot_unit_still_pending_with_no_state_file():
+    # regression test: a unit listed in pilot-manifest.tsv with no state
+    # file yet (still pending) must NOT be silently skipped — it must block
+    # auto-signoff, not be treated as "not clean enough to matter".
+    import tempfile
+    from pathlib import Path
+    state = _base_state(
+        pilot_manifest_exists=True,
+        pilot_signoff_exists=False,
+        unit_states={"A": UnitState("A", "pass", {}, "")},  # B has no entry at all
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp)
+        migration_dir = run_dir / "migration"
+        migration_dir.mkdir()
+        (migration_dir / "pilot-manifest.tsv").write_text("A\tx\ty\nB\tx\ty\n", encoding="utf-8")
+        state.run_dir = run_dir
+
+        decision = evaluate_gate(state)
+
+    assert decision.outcome == Outcome.NEEDS_HUMAN
+    assert decision.write_pilot_signoff is False
+
+
 def test_success_when_manifest_all_done_and_integration_pass():
     state = _base_state(
         manifest_rows=[{"unit_id": "A", "source_path": "x", "target_path": "y"}],
