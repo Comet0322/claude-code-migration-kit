@@ -7,13 +7,17 @@
 
 做法：
 1. 從 .vbp 檔案列出所有本地模組（Module=/Class=/Form=），COM 參考
-   （Object=...; xxx.dll）視為外部私有套件，不排進依賴圖裡（依賴圖只管
-   本地檔案之間的順序），但記進 `external-refs.tsv`——VB6 沒有逐檔宣告
-   依賴的語法，`Object=` 是專案層級（整個 .vbp）的參考，不是特定某個
-   .bas/.cls/.frm 檔案宣告的，所以這裡的 `source_path` 欄記的是 .vbp
-   本身，不是呼叫端的檔案。是不是原生/標準庫、要不要納入 domain skill
-   覆蓋範圍，是判斷不是事實，這支腳本不篩選、原樣列出，判斷交給
-   migration-clarify。
+   （`Object=`：Project→Components 加的 ActiveX 控制項/OCX；`Reference=`：
+   Project→References 加的型別庫/COM DLL——私有的業務邏輯 ActiveX DLL
+   〔例如一個部門自己的 all-in-one 私有套件〕實務上常是走這條，不是
+   `Object=`，兩種都要抓，只抓 `Object=` 會漏掉這類私有套件）視為外部
+   私有套件，不排進依賴圖裡（依賴圖只管本地檔案之間的順序），但記進
+   `external-refs.tsv`——VB6 沒有逐檔宣告依賴的語法，這兩種都是專案層級
+   （整個 .vbp）的參考，不是特定某個 .bas/.cls/.frm 檔案宣告的，所以這裡
+   的 `source_path` 欄記的是 .vbp 本身，不是呼叫端的檔案。是不是原生/
+   標準庫、要不要納入 domain skill 覆蓋範圍，是判斷不是事實，這支腳本不
+   篩選、原樣列出（含看起來像標準函式庫的 `Reference=`，例如
+   `stdole2.tlb`），判斷交給 migration-clarify。
 2. 對每個本地模組檔案，掃描是否出現其他本地模組的名稱（呼叫其 Public
    Sub/Function、或 New 出其 class）當作邊：A -> B 表示 A 依賴 B。
    這是保守的字串比對啟發式，不是完整的 VB6 語法解析器——對於呼叫關係
@@ -27,7 +31,7 @@
   migration/analysis/depmap/order.txt          拓樸排序後的檔案路徑，一行一個
   migration/analysis/depmap/cycles.txt         循環依賴分組，一行一組（逗號分隔）
   migration/analysis/depmap/external-refs.tsv  (source_path, reference)——
-    .vbp 裡的 `Object=` COM 參考，一列一筆
+    .vbp 裡的 `Object=`/`Reference=` COM 參考，一列一筆
 
 用法：
   python3 depmap_vb6.py <legacy 目錄> <輸出目錄>
@@ -67,14 +71,21 @@ def parse_vbp_modules(vbp_path):
     return modules
 
 
-def parse_vbp_object_refs(vbp_path):
-    """回傳這個 .vbp 裡列出的 COM 參考（Object= 那些行），原樣不篩選。"""
+def parse_vbp_external_refs(vbp_path):
+    """回傳這個 .vbp 裡列出的 COM 參考（Object=/Reference= 那些行），原樣不篩選。
+
+    Object= 是 Project→Components 加的 ActiveX 控制項；Reference= 是
+    Project→References 加的型別庫/COM DLL，私有業務邏輯 DLL 常見於後者——
+    只認 Object= 會漏掉這類私有套件，兩種前綴都要抓。
+    """
     refs = []
     with open(vbp_path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
-            if line.startswith("Object="):
-                refs.append(line[len("Object="):].strip())
+            for prefix in ("Object=", "Reference="):
+                if line.startswith(prefix):
+                    refs.append(line[len(prefix):].strip())
+                    break
     return refs
 
 
@@ -132,7 +143,7 @@ def main():
 
     external_refs = set()
     for vbp in vbp_files:
-        for ref in parse_vbp_object_refs(vbp):
+        for ref in parse_vbp_external_refs(vbp):
             external_refs.add((vbp, ref))
 
     external_refs_path = os.path.join(OUT_DIR, "external-refs.tsv")
