@@ -1,0 +1,10 @@
+{
+  "expected_outcome": "needs-human",
+  "expected_domain_skill": null,
+  "expected_units": {
+    "Dept200Data": "excluded",
+    "Dept200Log": "excluded",
+    "UserSync": "pass"
+  },
+  "notes": "domain-200-delphi-java 跟 domain-200-delphi-python 共用同一份來源端 Fingerprint，純程式碼證據無法判斷目標語言，預期 clarify 的 headless 自決在這裡卡住（needs-human）——這是已知、刻意保留的設計，不是缺陷。Dept200Data.pas / Dept200Log.pas 是私有套件本身的原始碼，預期被標 excluded。"
+}

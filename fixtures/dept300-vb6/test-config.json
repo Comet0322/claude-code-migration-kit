@@ -1,0 +1,8 @@
+{
+  "expected_outcome": "success",
+  "expected_domain_skill": "domain-300-vb-python",
+  "expected_units": {
+    "UserSync": "pass"
+  },
+  "notes": "Fingerprint 唯一對應 domain-300-vb-python（.vbp 裡的 #CorpUtil300# COM reference、HKLM\\Software\\Dept300\\DB registry key 存取），私有套件是外部編譯 DLL，不會有 excluded unit。"
+}
