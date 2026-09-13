@@ -6,35 +6,46 @@
 （見 `migration-analyze` 的「依賴圖：用腳本，不要用判斷力排序」節）。
 
 做法：
-1. 掃 ROOT 底下所有 .pas 檔案當本地模組節點——Delphi 的 unit 一個檔案一
-   個，`.pas` 副檔名本身就是夠可靠的訊號，不像 VB6 需要另外讀 .vbp 才知
-   道有哪些本地模組。`.dpr` 進入點檔案本身不當節點，只是應用程式的組裝
-   點，不是可重用的「單元」。
-2. 讀每個 .pas 檔案裡的 `unit <Name>;` 宣告取得這個檔案的單元名稱，抓不
-   到就用檔名（去掉副檔名）代替。
-3. 解析每個檔案裡全部 `uses ... ;` 子句（interface/implementation 各自
-   可能各有一個，都要抓，不能只抓第一個）取得這個檔案宣告依賴的單元名
-   稱清單，逐一比對是否為本地模組——是本地模組就記一條邊 A -> B（A 依
-   賴 B）；不是本地模組（標準庫如 SysUtils/Classes/IniFiles，或私有套
-   件的外部 COM DLL）就記進 `external-refs.tsv`，**原生標準庫跟私有套件
-   一律不分類、原樣全部記下來**——這兩者的邊界本身是判斷，不是事實，判
-   斷交給 migration-clarify 讀這份檔案時用它對來源語言的知識去篩，這支
-   腳本只負責把「解析不到本地檔案的引用」如實列出來，不做篩選、不猜測
-   哪些重要哪些不重要。
+1. 掃 ROOT 底下所有 .pas 檔案，讀每個檔案裡的 `unit <Name>;` 宣告取得單
+   元名稱（抓不到就用檔名代替），建立「單元名稱 → 檔案路徑」的全域對照
+   表——這一步只是為了之後能把 `uses` 子句裡的識別字解析回檔案路徑，本
+   身不代表這些檔案都會被納入分析範圍（見步驟 2）。
+2. **可達性分析，只納入真的被進入點用到的檔案**：從 ROOT 底下每個 `.dpr`
+   進入點檔案自己的 `uses` 子句當起點（`.dpr` 本身不是可重用的「單元」，
+   但它是應用程式實際組裝、真正決定「哪些檔案被編進這個程式」的地方，
+   不能不讀），沿著每個已解析到的本地單元自己的 `uses` 子句遞迴展開。
+   只有從進入點走得到的 `.pas` 檔案才當本地模組節點——ROOT 底下存在、但
+   從 `.dpr` 走不到的檔案（棄用的實驗性程式碼、複製留下的舊版本……）不
+   計入分析範圍，不會被誤判成需要遷移的 unit，也不會讓它們自己內部瞎猜
+   的依賴污染 `external-refs.tsv`。找不到任何 `.dpr` 時（理論上不該發
+   生，防禦性地）退回舊行為：ROOT 底下掃到的 `.pas` 全部當本地模組。
+3. 解析每個「進入點」與「可達單元」的全部 `uses ... ;` 子句（interface/
+   implementation 各自可能各有一個，都要抓，`.dpr` 的 `uses` 還可能帶
+   `UnitName in 'path.pas'` 這種語法，也要剝掉 `in '...'` 才能比對名
+   稱），逐一比對是否為可解析到的本地單元——是本地單元就記一條邊 A -> B
+   （A 依賴 B），並繼續展開 B；不是本地單元（標準庫如
+   SysUtils/Classes/IniFiles，或私有套件的外部 COM DLL）就記進
+   `external-refs.tsv`，**原生標準庫跟私有套件一律不分類、原樣全部記下
+   來**——這兩者的邊界本身是判斷，不是事實，判斷交給 migration-clarify
+   讀這份檔案時用它對來源語言的知識去篩，這支腳本只負責把「解析不到本
+   地檔案的引用」如實列出來，不做篩選、不猜測哪些重要哪些不重要。
    這是保守的 `uses` 子句擷取（先把 `//` 行註解跟 `{...}` 區塊註解拿
    掉，再抓 `uses ... ;`），不是完整的 Delphi 語法解析器——條件式編譯
    （`{$IFDEF}`）之類的邊角案例抓不到時，交給 units.tsv 的 risk_flag/
    risk_reason 欄標 high risk，不在這支腳本裡硬做完整 parser。
-4. 拓樸排序；抓循環依賴分組（跟 depmap_vb6.py 同一套演算法）。
+4. 拓樸排序；抓循環依賴分組（跟 depmap_vb6.py 同一套演算法），只對步驟
+   2 篩出的可達子集合做。
 
 輸出：跟 depmap_vb6.py 同一份契約：
   migration/analysis/depmap/edges.tsv          (from, to)
   migration/analysis/depmap/order.txt          拓樸排序後的檔案路徑，一行一個
   migration/analysis/depmap/cycles.txt         循環依賴分組，一行一組（逗號分隔）
   migration/analysis/depmap/external-refs.tsv  (source_path, reference)——
-    這個檔案引用了哪個解析不到本地檔案的識別字，一列一筆，同一個
-    reference 出現在很多檔案就會有很多列（migration-clarify 用列數當出
-    現次數的證據）
+    這個檔案（可達單元或 .dpr 本身）引用了哪個解析不到本地檔案的識別
+    字，一列一筆，同一個 reference 出現在很多檔案就會有很多列
+    （migration-clarify 用列數當出現次數的證據）。只有可達單元/.dpr
+    自己的 uses 子句會被列進來——不可達的死代碼檔案內部引用什麼，不出現
+    在這份清單裡。
 
 用法：
   python3 depmap_delphi.py <legacy 目錄> <輸出目錄>
@@ -56,6 +67,10 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 UNIT_NAME_RE = re.compile(r"^\s*unit\s+([A-Za-z_][A-Za-z0-9_.]*)\s*;", re.IGNORECASE | re.MULTILINE)
 USES_CLAUSE_RE = re.compile(r"\buses\b(.*?);", re.IGNORECASE | re.DOTALL)
+# .dpr 的 uses 子句裡，每個項目可能是 `UnitName` 或 `UnitName in 'path.pas'`
+# （只有 .dpr 支援 `in` 子句，一般 unit 檔案自己的 uses 不會有，但這裡通
+# 用處理不特別分支，不影響一般情況）。
+USES_PART_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*)\s*(?:in\s+['\"][^'\"]*['\"])?$", re.IGNORECASE)
 LINE_COMMENT_RE = re.compile(r"//.*")
 BLOCK_COMMENT_RE = re.compile(r"\{.*?\}", re.DOTALL)
 
@@ -70,6 +85,10 @@ def find_pas():
     return sorted(glob.glob(os.path.join(ROOT, "**", "*.[pP][aA][sS]"), recursive=True))
 
 
+def find_dpr():
+    return sorted(glob.glob(os.path.join(ROOT, "**", "*.[dD][pP][rR]"), recursive=True))
+
+
 def unit_name_from_content(path, content):
     m = UNIT_NAME_RE.search(content)
     if m:
@@ -78,19 +97,24 @@ def unit_name_from_content(path, content):
 
 
 def parse_uses(content):
-    """回傳這個檔案全部 uses 子句裡列出的識別字（可能跨 interface/
-    implementation 兩個子句），去除前後空白。"""
+    """回傳這個檔案（或 .dpr）全部 uses 子句裡列出的識別字（可能跨
+    interface/implementation 兩個子句），去除前後空白跟 `in '...'` 路徑
+    後綴。解析不到預期格式的項目照原樣整段保留，交給後面 resolve 不到就
+    記進 external-refs.tsv 當一筆線索，不靜默丟掉。"""
     names = []
     for clause in USES_CLAUSE_RE.findall(content):
         for part in clause.split(","):
-            name = part.strip()
-            if name:
-                names.append(name)
+            part = part.strip()
+            if not part:
+                continue
+            m = USES_PART_RE.match(part)
+            names.append(m.group(1) if m else part)
     return names
 
 
 def main():
     pas_files = find_pas()
+    dpr_files = find_dpr()
     if not pas_files:
         print("no .pas files found under", ROOT, file=sys.stderr)
 
@@ -107,15 +131,56 @@ def main():
         name = unit_name_from_content(path, content)
         name_to_path[name.lower()] = path
 
+    dpr_contents = {}
+    for dpr in dpr_files:
+        try:
+            with open(dpr, "r", encoding="utf-8", errors="replace") as f:
+                dpr_contents[dpr] = strip_comments(f.read())
+        except OSError:
+            dpr_contents[dpr] = ""
+
     edges = set()
     external_refs = set()
-    for path, content in contents.items():
-        for used in parse_uses(content):
-            target = name_to_path.get(used.lower())
-            if target and target != path:
-                edges.add((path, target))
-            elif not target:
-                external_refs.add((path, used))
+
+    if dpr_files:
+        # 可達性分析：從每個 .dpr 自己的 uses 子句當起點展開，只有真的走
+        # 得到的 .pas 檔案才算本地模組——見模組 docstring 步驟 2。
+        reachable = set()
+        queue = deque()
+        for dpr in dpr_files:
+            for used in parse_uses(dpr_contents[dpr]):
+                target = name_to_path.get(used.lower())
+                if target:
+                    queue.append(target)
+                else:
+                    external_refs.add((dpr, used))
+
+        while queue:
+            path = queue.popleft()
+            if path in reachable:
+                continue
+            reachable.add(path)
+            for used in parse_uses(contents.get(path, "")):
+                target = name_to_path.get(used.lower())
+                if target:
+                    if target != path:
+                        edges.add((path, target))
+                    if target not in reachable:
+                        queue.append(target)
+                else:
+                    external_refs.add((path, used))
+
+        contents = {path: content for path, content in contents.items() if path in reachable}
+    else:
+        # 找不到任何 .dpr（理論上不該發生）：退回舊行為，ROOT 底下掃到的
+        # .pas 全部當本地模組，不做可達性篩選。
+        for path, content in contents.items():
+            for used in parse_uses(content):
+                target = name_to_path.get(used.lower())
+                if target and target != path:
+                    edges.add((path, target))
+                elif not target:
+                    external_refs.add((path, used))
 
     edges_path = os.path.join(OUT_DIR, "edges.tsv")
     with open(edges_path, "w", encoding="utf-8") as f:
