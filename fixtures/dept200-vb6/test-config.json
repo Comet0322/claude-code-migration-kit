@@ -1,8 +1,0 @@
-{
-  "expected_outcome": "success",
-  "expected_domain_skill": "domain-200-vb-java",
-  "expected_units": {
-    "user_sync": "pass"
-  },
-  "notes": "Fingerprint 唯一對應 domain-200-vb-java（.vbp 裡的 #Dept200Common# COM reference），私有套件是外部編譯 DLL 沒有原始碼檔案，不會有 excluded unit。unit_id 用 snake_case「user_sync」，不是檔名「UserSync」——這是 migration-analyze 實際產生的 unit_id 命名慣例（見 Task 9 端到端驗收，跑過真的 fixture 才發現原本猜測「用檔名當 unit_id」是錯的）。"
-}

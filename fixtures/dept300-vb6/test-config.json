@@ -1,8 +1,0 @@
-{
-  "expected_outcome": "success",
-  "expected_domain_skill": "domain-300-vb-python",
-  "expected_units": {
-    "user_sync": "pass"
-  },
-  "notes": "Fingerprint 唯一對應 domain-300-vb-python（.vbp 裡的 #CorpUtil300# COM reference、HKLM\\Software\\Dept300\\DB registry key 存取），私有套件是外部編譯 DLL，不會有 excluded unit。unit_id 用 snake_case「user_sync」，不是檔名「UserSync」——這是 migration-analyze 實際產生的 unit_id 命名慣例（跟 dept200-vb6 用同一份 depmap_vb6.py，見 Task 9 端到端驗收在 dept200-vb6 上的確認）。"
-}

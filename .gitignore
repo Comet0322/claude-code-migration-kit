@@ -12,3 +12,11 @@ __pycache__/
 
 # harness 每次執行產生的 run 工作目錄，不是要進版控的產物
 runs/
+
+# harness/ 本身：公司內網 pull 這個 repo 時會被掃描工具/policy 卡住，
+# 移到獨立分支 harness-dev 保留，main 不再追蹤這個目錄——本機檔案還在，
+# 只是不進版控，繼續用 harness 測試不受影響。fixtures/ 沒有 harness 就
+# 沒有意義（只有 harness/provisioning.py 會讀它），一併移過去，不留在
+# main 當孤兒目錄。
+harness/
+fixtures/

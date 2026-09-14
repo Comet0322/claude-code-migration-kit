@@ -395,15 +395,22 @@ domain skill.
 
 ## Testing this kit
 
-`harness/` drives the whole pipeline headlessly end-to-end against the
-fixtures under `fixtures/` (simulated department 200 Delphi/VB6 and
-department 300 VB6 legacy apps), using the Claude Agent SDK, for regression
-testing this kit's own skill/agent prompts without a human in the loop
+A Python test harness drives the whole pipeline headlessly end-to-end
+against fixtures (simulated department 200 Delphi/VB6 and department 300 VB6
+legacy apps), using the Claude Agent SDK, for regression testing this kit's
+own skill/agent prompts without a human in the loop
 (`migration/clarify/.headless-test` marker makes `migration-clarify` pick its
 own best answer instead of calling `AskUserQuestion`, logging its reasoning to
 `migration/clarify/decision-log.md` instead of stopping).
 
+The harness itself (`harness/`, `fixtures/`) lives on the `harness-dev`
+branch, not `main` — kept off `main` so pulling this repo doesn't trip a
+scanning tool that the harness's own contents (Python subprocess/agent-SDK
+code, `.vbp`/`.pas`/`.bas` sample fixtures) otherwise gets flagged by. Check
+out that branch to run it:
+
 ```
+git checkout harness-dev
 uv sync
 .venv/bin/python -m pytest harness/tests/ -q
 ```
