@@ -125,6 +125,18 @@ agent eyeball the code:
   before conversion starts, not as a mid-conversion surprise.
 - Cyclic dependencies are never broken by judgment — every file in a cycle is
   merged into one `unit_id` (converted/tested/reviewed together).
+- **Some ambiguities a script can detect but not resolve on its own also get
+  surfaced, not silently guessed**: `depmap_vb6.py`/`depmap_delphi.py` both
+  do reachability analysis from each project entry point (`.vbp`/`.dpr`)
+  rather than blindly scanning every source file under the tree, so dead
+  code unreachable from any entry point never gets miscounted as a unit
+  needing migration. When the same unit/module name resolves to more than
+  one file (`ambiguous-units.tsv`), or more than one entry point exists
+  (`entry-points.tsv`), the script can't know which is "real" from source
+  alone — it picks one deterministically to keep going but records every
+  candidate, and `migration-analyze` folds this into `units.tsv`'s
+  `risk_flag`/`risk_reason` (or `ANALYSIS.md`'s own callout for multiple
+  entry points) for a human to resolve, the same way `cycle_group` is.
 - **Risk assessment is parallelized**: rather than one context reading every
   unit's source serially, the unit list is chunked (never splitting a
   `cycle_group` across chunks) and one `migration-risk-scanner` subagent

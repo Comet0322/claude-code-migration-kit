@@ -190,3 +190,111 @@ def test_no_dpr_falls_back_to_scanning_all_pas_files(tmp_path: Path):
 
     order = (out_dir / "order.txt").read_text(encoding="utf-8")
     assert "Orphan.pas" in order
+
+
+def test_duplicate_unit_name_flagged_not_silently_picked(tmp_path: Path):
+    # regression test：同一個 unit 名稱在不同目錄各出現一次（新舊備份、
+    # 真實搜尋路徑優先序決定用哪一份的情況）——這支腳本沒有專案的搜尋路
+    # 徑設定可用，無法真正判斷該用哪一份，只能挑一個繼續分析，但兩個候
+    # 選都要原樣記進 ambiguous-units.tsv，不能靜默吃掉一個。
+    legacy_dir = tmp_path / "legacy"
+    (legacy_dir / "dir1").mkdir(parents=True)
+    (legacy_dir / "dir2").mkdir(parents=True)
+    (legacy_dir / "App.dpr").write_text(
+        "program App;\nuses\n  UserSync in 'dir1\\UserSync.pas';\nbegin\nend.\n",
+        encoding="utf-8",
+    )
+    (legacy_dir / "dir1" / "UserSync.pas").write_text(
+        "unit UserSync;\ninterface\nimplementation\nuses\n  Utils;\nend.\n",
+        encoding="utf-8",
+    )
+    (legacy_dir / "dir1" / "Utils.pas").write_text(
+        "unit Utils;\ninterface\nimplementation\nend.\n", encoding="utf-8"
+    )
+    (legacy_dir / "dir2" / "Utils.pas").write_text(
+        "unit Utils;\ninterface\nimplementation\nend.\n", encoding="utf-8"
+    )
+    out_dir = tmp_path / "out"
+
+    _run_depmap(legacy_dir, out_dir)
+
+    ambiguous = (out_dir / "ambiguous-units.tsv").read_text(encoding="utf-8")
+    lines = [line for line in ambiguous.splitlines() if line]
+    assert len(lines) == 2
+    assert all(line.startswith("Utils\t") for line in lines)
+    assert str(legacy_dir / "dir1" / "Utils.pas") in ambiguous
+    assert str(legacy_dir / "dir2" / "Utils.pas") in ambiguous
+
+
+def test_no_ambiguity_yields_empty_ambiguous_units_file(tmp_path: Path):
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    (legacy_dir / "App.dpr").write_text(
+        "program App;\nuses\n  UserSync;\nbegin\nend.\n", encoding="utf-8"
+    )
+    (legacy_dir / "UserSync.pas").write_text(
+        "unit UserSync;\ninterface\nimplementation\nend.\n", encoding="utf-8"
+    )
+    out_dir = tmp_path / "out"
+
+    _run_depmap(legacy_dir, out_dir)
+
+    assert (out_dir / "ambiguous-units.tsv").read_text(encoding="utf-8") == ""
+
+
+def test_multiple_entry_points_each_reported_with_reachable_count(tmp_path: Path):
+    # regression test：一個 repo 底下有不止一個 .dpr——可能兩個都是真的
+    # 要建置的程式（例如共用同一批私有套件的主程式 + 小工具），也可能其
+    # 中一個其實是沒人在用的舊 prototype。這支腳本無法從原始碼判斷哪個是
+    # 真的，只能把每個進入點各自可達到幾個檔案列出來交給人確認。
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    (legacy_dir / "MainApp.dpr").write_text(
+        "program MainApp;\nuses\n  UserSync;\nbegin\nend.\n", encoding="utf-8"
+    )
+    (legacy_dir / "UserSync.pas").write_text(
+        "unit UserSync;\ninterface\nimplementation\nend.\n", encoding="utf-8"
+    )
+    (legacy_dir / "OldPrototype.dpr").write_text(
+        "program OldPrototype;\nuses\n  AbandonedProto;\nbegin\nend.\n", encoding="utf-8"
+    )
+    (legacy_dir / "AbandonedProto.pas").write_text(
+        "unit AbandonedProto;\ninterface\nimplementation\nend.\n", encoding="utf-8"
+    )
+    out_dir = tmp_path / "out"
+
+    _run_depmap(legacy_dir, out_dir)
+
+    entry_points = (out_dir / "entry-points.tsv").read_text(encoding="utf-8")
+    lines = sorted(line for line in entry_points.splitlines() if line)
+    assert lines == sorted(
+        [
+            f"{legacy_dir / 'MainApp.dpr'}\t1",
+            f"{legacy_dir / 'OldPrototype.dpr'}\t1",
+        ]
+    )
+    # 兩個進入點各自可達的檔案都還是要進 order.txt——腳本無法自己判斷哪個
+    # 是廢棄的，只是把事實攤開來給人確認，不是自作主張排除掉。
+    order = (out_dir / "order.txt").read_text(encoding="utf-8")
+    assert "AbandonedProto.pas" in order
+    assert "UserSync.pas" in order
+
+
+def test_single_entry_point_reports_one_row(tmp_path: Path):
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    (legacy_dir / "App.dpr").write_text(
+        "program App;\nuses\n  UserSync;\nbegin\nend.\n", encoding="utf-8"
+    )
+    (legacy_dir / "UserSync.pas").write_text(
+        "unit UserSync;\ninterface\nimplementation\nend.\n", encoding="utf-8"
+    )
+    out_dir = tmp_path / "out"
+
+    _run_depmap(legacy_dir, out_dir)
+
+    entry_points = [
+        line for line in (out_dir / "entry-points.tsv").read_text(encoding="utf-8").splitlines() if line
+    ]
+    assert len(entry_points) == 1
+    assert entry_points[0] == f"{legacy_dir / 'App.dpr'}\t1"

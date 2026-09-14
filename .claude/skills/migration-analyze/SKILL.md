@@ -61,12 +61,50 @@ have the agent eyeball code and order it by feel.
      classification is a judgment call, not a fact, and belongs to
      `migration-clarify`'s rulebook-drafting step, not here)
 
+   Some scripts also produce two further diagnostic outputs when the source
+   language's own structure creates an ambiguity the script can detect but
+   can't resolve on its own (e.g. `depmap_vb6.py`/`depmap_delphi.py` both do;
+   a script for a language with no such ambiguity may omit them) — read them
+   too when present, and see "Handling ambiguous unit resolution and
+   multiple entry points" below for what to do with each:
+   - `migration/analysis/depmap/ambiguous-units.tsv` (unit_name, path) — the
+     same unit/module name resolved to more than one file under the scan
+     root.
+   - `migration/analysis/depmap/entry-points.tsv` (entry_point_path,
+     reachable_or_declared_unit_count) — every project entry point found
+     (`.dpr`/`.vbp`), and how many files it alone accounts for.
+
 ## Handling cyclic dependencies
 
 Don't try to break cycles yourself. Merge every file in the same cycle into
 one `unit_id` in `units.tsv` (converted, tested, and reviewed together),
 tagged with the same `cycle_group` value — the only way topological order
 still holds when cycles exist.
+
+## Handling ambiguous unit resolution and multiple entry points
+
+These are still computed facts, not a risk-scanner judgment call — fold them
+into `units.tsv` directly yourself, the same way `cycle_group` is, not by
+waiting for a `migration-risk-scanner` dispatch:
+
+- **`ambiguous-units.tsv` has rows**: the same unit/module name resolved to
+  more than one file under the scan root — the script had to guess which one
+  is "real" without knowing the actual project search-path/build
+  configuration. For every affected unit (every row's `path` maps to a
+  `unit_id` in `units.tsv`), set `risk_flag: high` and `risk_reason` naming
+  the ambiguous unit name and listing every candidate path from the file, so
+  a human can confirm which one is actually used (and whether the others are
+  stale duplicates that should be deleted rather than migrated).
+- **`entry-points.tsv` has more than one row**: more than one project entry
+  point (`.dpr`/`.vbp`) was found under the scan root, and the script unioned
+  everything it reaches/declares into scope, since it can't tell from source
+  alone whether every entry point is actually built. Don't fold this into any
+  single unit's `risk_reason` — instead surface the full list (each entry
+  point's path and its own file count) as its own callout in
+  `migration/analysis/ANALYSIS.md`. A human needs to confirm every listed
+  entry point genuinely belongs to this migration (a real multi-program batch
+  sharing common code) rather than one being a stale/abandoned prototype
+  whose exclusive dependencies got pulled in as if they needed migrating.
 
 ## Risk assessment: split across parallel migration-risk-scanner subagents
 
@@ -111,19 +149,24 @@ Two artifacts, both under `migration/analysis/`:
   risk judgment — not three unrelated artifacts bolted together:
   `unit_id`/`source_path`/`cycle_group`/`order_index` come directly from
   `edges.tsv`/`order.txt`/`cycles.txt`; `risk_flag` (`high`/`normal`) and
-  `risk_reason` come from the `migration-risk-scanner` dispatches above, not
-  from you eyeballing the code yourself. `risk_flag` later drives
+  `risk_reason` come from the `migration-risk-scanner` dispatches above, or
+  directly from a script-detected ambiguity in `ambiguous-units.tsv` (see
+  "Handling ambiguous unit resolution and multiple entry points") — not from
+  you eyeballing the code yourself either way. `risk_flag` later drives
   `migration-clarify`'s pilot-subset selection (prioritize `high`-flagged
   units for the pilot).
 - **`migration/analysis/ANALYSIS.md`** — a human-readable summary, for
   someone orienting themselves without wanting to parse four `.tsv`/`.txt`
   files: total unit count, cycle-group count and which units are in each
-  cycle, high-risk units with their `risk_reason` up front, the most
-  frequently occurring `external-refs.tsv` entries (a preview of what
-  `migration-clarify` will need to classify, not a classification itself —
-  that's still not this step's call), and every unit's one-line summary
-  from its `migration-risk-scanner` (grouped by risk level, high first, so
-  the parts most worth a human's attention aren't buried at the bottom).
+  cycle, high-risk units with their `risk_reason` up front (ambiguous-unit
+  flags included), the most frequently occurring `external-refs.tsv` entries
+  (a preview of what `migration-clarify` will need to classify, not a
+  classification itself — that's still not this step's call), the
+  multiple-entry-points callout when `entry-points.tsv` has more than one row
+  (see "Handling ambiguous unit resolution and multiple entry points"), and
+  every unit's one-line summary from its `migration-risk-scanner` (grouped by
+  risk level, high first, so the parts most worth a human's attention aren't
+  buried at the bottom).
 
 ## Boundaries
 

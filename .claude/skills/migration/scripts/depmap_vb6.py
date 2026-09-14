@@ -26,12 +26,27 @@
    完整 parser。
 3. 拓樸排序；抓循環依賴分組。
 
-輸出：
+ROOT 底下有一個以上的 `.vbp` 時，這支腳本會把所有專案宣告的模組取聯集
+（沒有足夠資訊判斷某個 `.vbp` 是不是其實沒被真的建置過——那是人的知識，
+不是能從原始碼推論的事實），但同時把每個 `.vbp` 自己宣告了幾個模組列
+出來，交給 migration-clarify/人確認每一個是不是真的都屬於這次遷移範
+圍。同一個模組名稱（`Attribute VB_Name`）如果對到不只一個檔案（不同
+`.vbp` 專案各自宣告同名模組、複製留下的新舊版本……），一律記進
+`ambiguous-units.tsv`，解析時挑一個（依路徑排序取第一個，至少每次執行
+結果一致）繼續分析，不代表這就是「正確」的那一份。
+
+輸出：核心四項，另外兩項是診斷輸出（見上一段兩種歧義）：
   migration/analysis/depmap/edges.tsv          (from, to)
   migration/analysis/depmap/order.txt          拓樸排序後的檔案路徑，一行一個
   migration/analysis/depmap/cycles.txt         循環依賴分組，一行一組（逗號分隔）
   migration/analysis/depmap/external-refs.tsv  (source_path, reference)——
     .vbp 裡的 `Object=`/`Reference=` COM 參考，一列一筆
+  migration/analysis/depmap/ambiguous-units.tsv  (unit_name, path)——同一個
+    模組名稱對到不只一個檔案的每一筆候選，一列一筆；空檔案代表沒有這種
+    歧義。
+  migration/analysis/depmap/entry-points.tsv  (vbp_path, module_count)——
+    ROOT 底下每個 .vbp 自己宣告了幾個模組，一列一筆；只有一列時代表只
+    有一個進入點，不需要特別確認。
 
 用法：
   python3 depmap_vb6.py <legacy 目錄> <輸出目錄>
@@ -107,11 +122,13 @@ def main():
     if not vbp_files:
         print("no .vbp project files found under", ROOT, file=sys.stderr)
 
+    entry_point_counts = {}  # vbp_path -> module count declared by that project
     all_modules = []  # (path, name)
     for vbp in vbp_files:
-        for path in parse_vbp_modules(vbp):
-            if os.path.exists(path):
-                all_modules.append((path, module_name_from_path(path)))
+        modules_here = [p for p in parse_vbp_modules(vbp) if os.path.exists(p)]
+        entry_point_counts[vbp] = len(modules_here)
+        for path in modules_here:
+            all_modules.append((path, module_name_from_path(path)))
 
     # 沒有 .vbp 或抓不到模組時，退回直接掃 legacy 目錄下的 .bas/.cls/.frm
     if not all_modules:
@@ -120,7 +137,38 @@ def main():
                      glob.glob(os.path.join(ROOT, "**", "*.[fF][rR][mM]"), recursive=True):
             all_modules.append((path, module_name_from_path(path)))
 
-    name_to_path = {name: path for path, name in all_modules}
+    if len(vbp_files) > 1:
+        print(
+            f"warning: found {len(vbp_files)} .vbp entry points — verify every one is "
+            "actually built as part of this migration (see entry-points.tsv), not a "
+            "stale/abandoned prototype",
+            file=sys.stderr,
+        )
+
+    # 同一個模組名稱可能對到不只一個檔案（不同 .vbp 專案各自宣告同名模組、
+    # 複製留下的新舊版本……）——這支腳本沒有真正的專案建置資訊可用，無法
+    # 判斷該用哪一份，只能挑一個（依路徑排序取第一個，至少每次執行結果
+    # 一致）繼續分析，同時把每一筆衝突原樣記下來，不靜默吃掉，交給人判斷。
+    name_to_candidates = defaultdict(list)
+    for path, name in all_modules:
+        name_to_candidates[name].append(path)
+
+    name_to_path = {}
+    ambiguous_units = []
+    for name, paths in name_to_candidates.items():
+        paths_sorted = sorted(set(paths))
+        name_to_path[name] = paths_sorted[0]
+        if len(paths_sorted) > 1:
+            for path in paths_sorted:
+                ambiguous_units.append((name, path))
+
+    if ambiguous_units:
+        print(
+            f"warning: {len({name for name, _ in ambiguous_units})} module name(s) resolved "
+            "ambiguously across multiple files — see ambiguous-units.tsv",
+            file=sys.stderr,
+        )
+
     edges = set()
 
     for path, name in all_modules:
@@ -150,6 +198,16 @@ def main():
     with open(external_refs_path, "w", encoding="utf-8") as f:
         for vbp, ref in sorted(external_refs):
             f.write(f"{vbp}\t{ref}\n")
+
+    ambiguous_units_path = os.path.join(OUT_DIR, "ambiguous-units.tsv")
+    with open(ambiguous_units_path, "w", encoding="utf-8") as f:
+        for name, path in sorted(ambiguous_units):
+            f.write(f"{name}\t{path}\n")
+
+    entry_points_path = os.path.join(OUT_DIR, "entry-points.tsv")
+    with open(entry_points_path, "w", encoding="utf-8") as f:
+        for vbp in sorted(vbp_files):
+            f.write(f"{vbp}\t{entry_point_counts.get(vbp, 0)}\n")
 
     # 拓樸排序 + 循環偵測 (Tarjan SCC 簡化版：用 DFS 找環)
     graph = defaultdict(set)
@@ -265,8 +323,10 @@ def main():
             f.write(p + "\n")
 
     print(f"modules={len(nodes)} edges={len(edges)} cycle_groups={len(cycle_groups)} "
-          f"external_refs={len(external_refs)}")
-    print(f"wrote {edges_path}, {order_path}, {cycles_path}, {external_refs_path}")
+          f"external_refs={len(external_refs)} entry_points={len(vbp_files)} "
+          f"ambiguous_units={len({name for name, _ in ambiguous_units})}")
+    print(f"wrote {edges_path}, {order_path}, {cycles_path}, {external_refs_path}, "
+          f"{ambiguous_units_path}, {entry_points_path}")
 
 
 if __name__ == "__main__":

@@ -19,6 +19,18 @@
    計入分析範圍，不會被誤判成需要遷移的 unit，也不會讓它們自己內部瞎猜
    的依賴污染 `external-refs.tsv`。找不到任何 `.dpr` 時（理論上不該發
    生，防禦性地）退回舊行為：ROOT 底下掃到的 `.pas` 全部當本地模組。
+   每個 `.dpr` 各自展開一次（不是合成一個共用起點），這樣才能個別算出
+   「這個進入點自己可達到幾個檔案」寫進 `entry-points.tsv`：ROOT 底下有
+   一個以上的 `.dpr` 時，這支腳本會把所有進入點各自可達的集合取聯集
+   （沒有足夠資訊判斷某個 `.dpr` 是不是其實沒被真的建置過——那是人的知
+   識，不是能從原始碼推論的事實），但同時把每個進入點各自可達到幾個檔
+   案列出來，交給 migration-clarify/人確認每一個是不是真的都屬於這次
+   遷移範圍，而不是有一個其實是離群的舊/棄用進入點。
+   同一個單元名稱如果在掃描範圍內對到不只一個檔案（新舊備份版本、真實
+   專案裡靠搜尋路徑優先序決定用哪一份的情況——這支腳本沒有專案的搜尋路
+   徑設定可用，無法真正判斷該用哪一份），一律記進
+   `ambiguous-units.tsv`，解析時挑一個（依路徑排序取第一個，至少每次執
+   行結果一致）繼續分析，不代表這就是「正確」的那一份。
 3. 解析每個「進入點」與「可達單元」的全部 `uses ... ;` 子句（interface/
    implementation 各自可能各有一個，都要抓，`.dpr` 的 `uses` 還可能帶
    `UnitName in 'path.pas'` 這種語法，也要剝掉 `in '...'` 才能比對名
@@ -36,7 +48,9 @@
 4. 拓樸排序；抓循環依賴分組（跟 depmap_vb6.py 同一套演算法），只對步驟
    2 篩出的可達子集合做。
 
-輸出：跟 depmap_vb6.py 同一份契約：
+輸出：核心四項跟 depmap_vb6.py 同一份契約，另外兩項是 Delphi 專屬的診斷
+輸出（depmap_vb6.py 沒有，因為 VB6 靠 .vbp 明確登記模組清單，沒有這兩種
+歧義）：
   migration/analysis/depmap/edges.tsv          (from, to)
   migration/analysis/depmap/order.txt          拓樸排序後的檔案路徑，一行一個
   migration/analysis/depmap/cycles.txt         循環依賴分組，一行一組（逗號分隔）
@@ -46,6 +60,12 @@
     （migration-clarify 用列數當出現次數的證據）。只有可達單元/.dpr
     自己的 uses 子句會被列進來——不可達的死代碼檔案內部引用什麼，不出現
     在這份清單裡。
+  migration/analysis/depmap/ambiguous-units.tsv  (unit_name, path)——同一個
+    單元名稱在掃描範圍內對到不只一個檔案的每一筆候選，一列一筆；空檔案
+    代表沒有這種歧義。
+  migration/analysis/depmap/entry-points.tsv  (dpr_path, reachable_unit_count)
+    ——ROOT 底下每個 .dpr 各自可達到幾個檔案，一列一筆；只有一列時代表
+    只有一個進入點，不需要特別確認。
 
 用法：
   python3 depmap_delphi.py <legacy 目錄> <輸出目錄>
@@ -126,10 +146,25 @@ def main():
         except OSError:
             contents[path] = ""
 
-    name_to_path = {}
+    # 同一個 unit 名稱可能在掃描範圍內的不同目錄各出現一次（新舊備份版本、
+    # 真實專案裡靠搜尋路徑優先序決定用哪一份的情況）——這支腳本無法得知
+    # 真正的搜尋路徑設定，只能挑一個（依路徑排序，取第一個，至少每次執行
+    # 結果一致）當作 name_to_path 的解析結果，同時把每一筆衝突原樣記下
+    # 來，不靜默吃掉，交給人判斷該用哪一份。
+    name_to_candidates = defaultdict(list)
     for path, content in contents.items():
         name = unit_name_from_content(path, content)
-        name_to_path[name.lower()] = path
+        name_to_candidates[name.lower()].append((name, path))
+
+    name_to_path = {}
+    ambiguous_units = []
+    for candidates in name_to_candidates.values():
+        candidates.sort(key=lambda c: c[1])
+        display_name, chosen_path = candidates[0]
+        name_to_path[display_name.lower()] = chosen_path
+        if len(candidates) > 1:
+            for _, path in candidates:
+                ambiguous_units.append((display_name, path))
 
     dpr_contents = {}
     for dpr in dpr_files:
@@ -143,11 +178,17 @@ def main():
     external_refs = set()
 
     if dpr_files:
-        # 可達性分析：從每個 .dpr 自己的 uses 子句當起點展開，只有真的走
-        # 得到的 .pas 檔案才算本地模組——見模組 docstring 步驟 2。
+        # 可達性分析：從每個 .dpr 自己的 uses 子句當起點各自展開一次（不是
+        # 合成一個共用 queue）——這樣才能個別算出「這個進入點自己可達到幾
+        # 個檔案」，寫進 entry-points.tsv 給人判斷是不是有進入點其實沒被
+        # 真的建置過。最終的本地模組範圍是所有進入點各自可達集合的聯集：
+        # 找不到某個 .dpr 是不是真的還在用是人的知識，這支腳本不猜，只把
+        # 每個進入點各自的可達範圍攤開來給人看——見模組 docstring 步驟 2。
         reachable = set()
-        queue = deque()
+        entry_point_counts = {}
         for dpr in dpr_files:
+            local_reachable = set()
+            queue = deque()
             for used in parse_uses(dpr_contents[dpr]):
                 target = name_to_path.get(used.lower())
                 if target:
@@ -155,25 +196,37 @@ def main():
                 else:
                     external_refs.add((dpr, used))
 
-        while queue:
-            path = queue.popleft()
-            if path in reachable:
-                continue
-            reachable.add(path)
-            for used in parse_uses(contents.get(path, "")):
-                target = name_to_path.get(used.lower())
-                if target:
-                    if target != path:
-                        edges.add((path, target))
-                    if target not in reachable:
-                        queue.append(target)
-                else:
-                    external_refs.add((path, used))
+            while queue:
+                path = queue.popleft()
+                if path in local_reachable:
+                    continue
+                local_reachable.add(path)
+                for used in parse_uses(contents.get(path, "")):
+                    target = name_to_path.get(used.lower())
+                    if target:
+                        if target != path:
+                            edges.add((path, target))
+                        if target not in local_reachable:
+                            queue.append(target)
+                    else:
+                        external_refs.add((path, used))
+
+            entry_point_counts[dpr] = len(local_reachable)
+            reachable |= local_reachable
+
+        if len(dpr_files) > 1:
+            print(
+                f"warning: found {len(dpr_files)} .dpr entry points — verify every one is "
+                "actually built as part of this migration (see entry-points.tsv), not a "
+                "stale/abandoned prototype",
+                file=sys.stderr,
+            )
 
         contents = {path: content for path, content in contents.items() if path in reachable}
     else:
         # 找不到任何 .dpr（理論上不該發生）：退回舊行為，ROOT 底下掃到的
         # .pas 全部當本地模組，不做可達性篩選。
+        entry_point_counts = {}
         for path, content in contents.items():
             for used in parse_uses(content):
                 target = name_to_path.get(used.lower())
@@ -181,6 +234,13 @@ def main():
                     edges.add((path, target))
                 elif not target:
                     external_refs.add((path, used))
+
+    if ambiguous_units:
+        print(
+            f"warning: {len({name for name, _ in ambiguous_units})} unit name(s) resolved "
+            "ambiguously across multiple files — see ambiguous-units.tsv",
+            file=sys.stderr,
+        )
 
     edges_path = os.path.join(OUT_DIR, "edges.tsv")
     with open(edges_path, "w", encoding="utf-8") as f:
@@ -191,6 +251,16 @@ def main():
     with open(external_refs_path, "w", encoding="utf-8") as f:
         for path, ref in sorted(external_refs):
             f.write(f"{path}\t{ref}\n")
+
+    ambiguous_units_path = os.path.join(OUT_DIR, "ambiguous-units.tsv")
+    with open(ambiguous_units_path, "w", encoding="utf-8") as f:
+        for name, path in sorted(ambiguous_units):
+            f.write(f"{name}\t{path}\n")
+
+    entry_points_path = os.path.join(OUT_DIR, "entry-points.tsv")
+    with open(entry_points_path, "w", encoding="utf-8") as f:
+        for dpr in sorted(dpr_files):
+            f.write(f"{dpr}\t{entry_point_counts.get(dpr, 0)}\n")
 
     # 拓樸排序 + 循環偵測 (Tarjan SCC 簡化版：用 DFS 找環)——跟 depmap_vb6.py 同一套
     nodes = set(contents.keys())
@@ -300,8 +370,10 @@ def main():
             f.write(p + "\n")
 
     print(f"modules={len(nodes)} edges={len(edges)} cycle_groups={len(cycle_groups)} "
-          f"external_refs={len(external_refs)}")
-    print(f"wrote {edges_path}, {order_path}, {cycles_path}, {external_refs_path}")
+          f"external_refs={len(external_refs)} entry_points={len(dpr_files)} "
+          f"ambiguous_units={len({name for name, _ in ambiguous_units})}")
+    print(f"wrote {edges_path}, {order_path}, {cycles_path}, {external_refs_path}, "
+          f"{ambiguous_units_path}, {entry_points_path}")
 
 
 if __name__ == "__main__":
