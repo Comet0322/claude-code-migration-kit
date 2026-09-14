@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.boogie.sdk</groupId>
+  <artifactId>boogie-sdk</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <name>boogie-sdk</name>
+  <description>Simulated all-in-one internal platform library (training use only)</description>
+
+  <properties>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <junit.version>5.10.2</junit.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!--
+      Compile scope: DbClient itself is backed by a real H2 in-memory
+      database at runtime (not just in tests), per the `infra` module's
+      convention. DbClientTest also uses this same dependency directly to
+      validate its own fixture SQL (DDL/DML) independently of DbClient's
+      implementation.
+    -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>2.2.224</version>
+    </dependency>
+    <!--
+      Compile scope: the `deviceio` module's ReportGenerator/FlatFileParser
+      classes need real document/parsing libraries at runtime (not just in
+      tests), mirroring the already-built Python port's use of openpyxl,
+      fpdf2, and the csv stdlib module — per this module's explicit
+      "real, well-established libraries, not a hand-rolled parser"
+      convention (a hand-rolled SQL parameter parser bug was already found
+      and fixed in the `infra` module).
+    -->
+    <dependency>
+      <!-- ReportGenerator.generateExcel: real .xlsx generation/reading. -->
+      <groupId>org.apache.poi</groupId>
+      <artifactId>poi-ooxml</artifactId>
+      <version>5.4.1</version>
+    </dependency>
+    <dependency>
+      <!-- ReportGenerator.generatePdf: real minimal PDF generation. -->
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>3.0.8</version>
+    </dependency>
+    <dependency>
+      <!-- FlatFileParser: real CSV parsing (handles quoting/escaping
+           correctly, unlike a hand-rolled comma splitter). -->
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+      <version>1.14.1</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
+      <plugin>
+        <!--
+          Lets the ETL example (src/main/java/.../examples/etldemo) run
+          directly out of the compiled classpath, e.g.:
+            mvn -f .claude/skills/java-template/vendor/boogie-sdk-java/pom.xml compile exec:java \
+                -Dexec.mainClass="com.boogie.sdk.examples.etldemo.EtlDemo"
+        -->
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.5.0</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>

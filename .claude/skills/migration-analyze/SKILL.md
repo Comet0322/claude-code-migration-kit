@@ -16,11 +16,13 @@ call.
 
 ## Why this step can't decide target_path
 
-Target-path naming conventions come from the domain skill's template-project
-section, and the domain skill isn't selected until `migration-clarify` (analysis
-runs first, domain-skill selection comes later). So this step only orders
-things — it doesn't fill in "where it goes." That's left for
-`migration-clarify` to complete on the manifest draft.
+`migration` selects `domain_skill` before calling you (recorded in the
+repo's root `CLAUDE.md`), so the domain skill itself is known by the time
+you run — but target-path naming conventions come from that domain skill's
+template-project section *and* `target_shape` (a separate decision
+`migration-clarify` makes, only relevant to some domain skills). Deciding
+`target_path` is still `migration-clarify`'s job on the manifest draft, not
+yours — this step only orders things, it doesn't fill in "where it goes."
 
 ## Dependency graph: use a script, not judgment
 
@@ -83,9 +85,9 @@ still holds when cycles exist.
 
 ## Handling ambiguous unit resolution and multiple entry points
 
-These are still computed facts, not a risk-scanner judgment call — fold them
-into `units.tsv` directly yourself, the same way `cycle_group` is, not by
-waiting for a `migration-risk-scanner` dispatch:
+These are still computed facts, not a scanner-subagent judgment call — fold
+them into `units.tsv` directly yourself, the same way `cycle_group` is, not
+by waiting for a `migration-unit-scanner` dispatch:
 
 - **`ambiguous-units.tsv` has rows**: the same unit/module name resolved to
   more than one file under the scan root — the script had to guess which one
@@ -106,13 +108,13 @@ waiting for a `migration-risk-scanner` dispatch:
   sharing common code) rather than one being a stale/abandoned prototype
   whose exclusive dependencies got pulled in as if they needed migrating.
 
-## Risk assessment: split across parallel migration-risk-scanner subagents
+## Unit scan: split across parallel migration-unit-scanner subagents
 
 Once the script's output gives you the unit list (one row per file, or per
-merged cycle-group), reading every unit's actual source to judge
-`risk_flag`/`risk_reason` yourself in one context doesn't scale — a real
-batch can be dozens to hundreds of files, and holding all of it in one
-context defeats the point of chunking the work at all. Instead:
+merged cycle-group), reading every unit's actual source yourself in one
+context doesn't scale — a real batch can be dozens to hundreds of files,
+and holding all of it in one context defeats the point of chunking the work
+at all. Instead:
 
 1. **Chunk the unit list, never splitting a `cycle_group` across chunks** —
    a cycle group's units are already treated as one atomic thing downstream
@@ -121,25 +123,33 @@ context defeats the point of chunking the work at all. Instead:
    picture. Size chunks so each one is comfortably readable in one pass — a
    rough guideline is "a handful of files," not a fixed count; a small batch
    might be one chunk, a large one might be a dozen.
-2. **Dispatch one `migration-risk-scanner` subagent per chunk, in parallel**
+2. **Dispatch one `migration-unit-scanner` subagent per chunk, in parallel**
    — send all the Task calls together, not one at a time waiting for each
-   to finish before starting the next. Give each one only its own chunk's
-   `unit_id`/`source_path`(s)/`cycle_group` — it doesn't need the rest of
-   the batch.
+   to finish before starting the next. Give each one its own chunk's
+   `unit_id`/`source_path`(s)/`cycle_group`, plus `domain_skill`'s
+   target-language library docs (already known — `migration` decides
+   `domain_skill` before you ever run, see root `CLAUDE.md`) so it can do
+   both of its jobs — risk assessment and library-substitution detection —
+   from the same single read, instead of a second subagent re-reading the
+   same source later in `migration-clarify`.
 3. Specify a model explicitly for every dispatch (mid-tier is enough — this
-   is mechanical read-and-summarize work, not a judgment call requiring the
+   is mechanical read-and-report work, not a judgment call requiring the
    strongest available model) — same "never let it inherit the caller's
    model" discipline as `migration-convert`'s subagent dispatches.
-4. Merge every scanner's returned rows into `units.tsv`'s `risk_flag`/
-   `risk_reason` columns, and keep the one-line summaries for
-   `migration/analysis/ANALYSIS.md` below. If a scanner reports a source
-   file it couldn't read, don't guess a risk assessment for that unit
-   yourself — carry the "couldn't read" note into both outputs so a human
-   sees it, same as any other gap.
+4. Merge every scanner's returned rows: risk-assessment rows into
+   `units.tsv`'s `risk_flag`/`risk_reason` columns (keep the one-line
+   summaries for `migration/analysis/ANALYSIS.md` below), library-substitution
+   findings into
+   `migration/analysis/depmap/library-substitution-candidates.tsv`
+   (`unit_id, source_pointer, capability, evidence` — `migration-clarify`'s
+   rulebook-drafting step reads this later, it doesn't re-scan). If a
+   scanner reports a source file it couldn't read, don't guess either
+   output for that unit yourself — carry the "couldn't read" note into
+   `units.tsv`/`ANALYSIS.md` so a human sees it, same as any other gap.
 
 ## Output
 
-Two artifacts, both under `migration/analysis/`:
+Three artifacts, all under `migration/analysis/`:
 
 - **`migration/analysis/units.tsv`** — columns `unit_id, source_path,
   cycle_group, order_index, risk_flag, risk_reason`, in topological order
@@ -149,14 +159,19 @@ Two artifacts, both under `migration/analysis/`:
   risk judgment — not three unrelated artifacts bolted together:
   `unit_id`/`source_path`/`cycle_group`/`order_index` come directly from
   `edges.tsv`/`order.txt`/`cycles.txt`; `risk_flag` (`high`/`normal`) and
-  `risk_reason` come from the `migration-risk-scanner` dispatches above, or
+  `risk_reason` come from the `migration-unit-scanner` dispatches above, or
   directly from a script-detected ambiguity in `ambiguous-units.tsv` (see
   "Handling ambiguous unit resolution and multiple entry points") — not from
   you eyeballing the code yourself either way. `risk_flag` later drives
   `migration-clarify`'s pilot-subset selection (prioritize `high`-flagged
   units for the pilot).
+- **`migration/analysis/depmap/library-substitution-candidates.tsv`** — columns
+  `unit_id, source_pointer, capability, evidence`, the `migration-unit-scanner`
+  dispatches' job-2 findings merged together (may be empty — that's valid,
+  not every batch has any). `migration-clarify`'s rulebook-drafting step
+  reads this directly; you don't classify or act on it yourself.
 - **`migration/analysis/ANALYSIS.md`** — a human-readable summary, for
-  someone orienting themselves without wanting to parse four `.tsv`/`.txt`
+  someone orienting themselves without wanting to parse the `.tsv`/`.txt`
   files: total unit count, cycle-group count and which units are in each
   cycle, high-risk units with their `risk_reason` up front (ambiguous-unit
   flags included), the most frequently occurring `external-refs.tsv` entries
@@ -164,7 +179,7 @@ Two artifacts, both under `migration/analysis/`:
   classification itself — that's still not this step's call), the
   multiple-entry-points callout when `entry-points.tsv` has more than one row
   (see "Handling ambiguous unit resolution and multiple entry points"), and
-  every unit's one-line summary from its `migration-risk-scanner` (grouped by
+  every unit's one-line summary from its `migration-unit-scanner` (grouped by
   risk level, high first, so the parts most worth a human's attention aren't
   buried at the bottom).
 
@@ -177,8 +192,11 @@ don't write any unit's code; don't produce the final `migration/clarify/manifest
 ## Done when
 
 Stop once the three `migration/analysis/depmap/` intermediate files,
-`units.tsv`, and `migration/analysis/ANALYSIS.md` all exist; report a
-summary (unit count, cycle-group count, high-risk unit count). Read-only and
-rerunnable — the top-level orchestrator can go straight to
+`units.tsv`, `library-substitution-candidates.tsv`, and
+`migration/analysis/ANALYSIS.md` all exist (an empty
+`library-substitution-candidates.tsv` is fine — that's a valid result, not
+a missing one); report a summary (unit count, cycle-group count, high-risk
+unit count). Read-only and rerunnable — the top-level orchestrator can go
+straight to
 `migration-clarify` without human sign-off, unless the scale or complexity
 of cycles is unusual enough that you judge a human should look first.

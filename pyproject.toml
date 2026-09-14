@@ -14,3 +14,8 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.uv.workspace]
+members = [
+    ".claude/skills/python-template/vendor/boogie-sdk-python",
+]

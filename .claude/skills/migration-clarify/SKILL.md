@@ -9,513 +9,303 @@ description: >
 
 # Clarification and Gap Analysis Skill
 
-This is the heaviest human-collaboration step in the whole pipeline — your
-output decides where the conversion stage's rules come from. Mistakes here
-are the most expensive, so make your reasoning visible after every section
-instead of deciding silently and moving on.
+The heaviest human-collaboration step in the pipeline — mistakes here are
+the most expensive. Show your reasoning after every section instead of
+deciding silently.
 
-## Headless test protocol (active when `migration/clarify/.headless-test` exists)
+## Decision points
 
-This skill normally uses `AskUserQuestion` to let a human decide at several
-points. If the marker file `migration/clarify/.headless-test` exists, you're being
-driven unattended by an automated test harness:
+Sections marked **[decision point]** share one shape: gather evidence,
+compute a recommendation, ask the human once via `AskUserQuestion`
+(recommendation + reasoning up front, never a bare option list), then
+record the answer and reasoning at the named target — never a silent
+default. Each section below states only its **evidence**, **options**, and
+**record target**; the ask/record mechanics aren't repeated.
 
-- Anywhere that would normally call `AskUserQuestion` (or otherwise stop and
-  wait for a reply): instead, using the same evidence and reasoning you'd
-  use to rank recommendations, **pick the option you judge most reasonable
-  yourself**, append the full candidate comparison, reasoning, and
-  confidence level to `migration/clarify/decision-log.md` (headed `## <section
-  title>`), then proceed with that decision — don't stop. End the entry with
-  `STATUS: decided`.
-- Exception: if the evidence genuinely doesn't favor any option (e.g.
-  candidate domain skills are indistinguishable, or the code gives no clue
-  about target shape/UI scope), log the reasoning the same way but end with
-  `STATUS: needs-human`, then **stop the whole skill call** — this isn't a
-  failure, it's a case a human would need to weigh in on too; an honest
-  record beats a forced guess.
-- When the marker doesn't exist (the normal case), none of this applies —
-  use the regular `AskUserQuestion` flow.
+## 1. Load domain skill content
 
-Domain-skill selection specifically also honors one more, narrower marker:
-`migration/clarify/.headless-test-domain-skill` (only meaningful together with
-`.headless-test`). If present, its contents force-select a specific domain
-skill instead of running the normal self-decide/ambiguity logic — see
-section 1. This exists purely to regression-test a domain skill's full
-conversion pipeline through a fingerprint that's *deliberately* ambiguous by
-design (e.g. the same source facts intentionally shared by two domain skills
-targeting different languages, which would otherwise always stop at
-`needs-human` and never get exercised past domain-skill selection). A real
-migration run has no such marker available, since a real run has no way to
-know the "correct" answer in advance — this is a test-only escape hatch, not
-a general override mechanism for any other section's decisions.
+`migration` already decided `domain_skill` before calling you — read it
+from the repo's root `CLAUDE.md` (line "Migration domain skill: `<name>`"),
+don't re-decide it, and don't ask the human again. Missing? Stop and tell
+the human to rerun `migration` first — you never pick a domain skill
+yourself, and you never invent one.
 
-Regardless of the marker, `migration/clarify/RULEBOOK.md` frontmatter's
-`ground_truth_tier` field must be one of `environment` / `snapshot` /
-`inference`, with `ground_truth_reason` holding the rationale — a format
-requirement, not a change to the three-tier decision logic below.
+Load: private package documentation, UI/scope conventions (if written),
+template project, syntax-conversion/library-replacement rules,
+target-language library docs, test/build method. Feeds every later section
+and all three conversion-stage subagents.
 
-## 1. Select domain skill (once per repo, not per unit)
+`domain_skill` may itself be a `*-template` skill used directly (`migration`
+offers this when no domain-* skill matched) — a template skill only has
+template project/library docs/test-build method, never private package
+documentation, app types, or UI/scope conventions. Treat every section this
+domain skill doesn't have the same as "written but empty": every later
+section already has a fallback for that (section 4 treats an empty seed
+rules table as "everything's a gap, ask"; the UI decision point asks
+plainly with no recommendation; the private-package check no-ops with
+nothing to match against). Don't treat a missing section as an error.
 
-- Check whether `migration/clarify/RULEBOOK.md` already exists with a `domain_skill`
-  field in its frontmatter — if already selected earlier in this
-  conversation (e.g. rerunning this skill in the same session), load it and
-  don't ask again.
-- If not: scan installed skills named `domain-*` (workspace and user level;
-  `domain-template` itself never counts, skip it). None found → **stop and
-  tell the human to prepare one first** — copying `domain-template` and
-  filling it in works — never invent domain knowledge from nothing.
-- Candidates found: read the actual code in this repo (import paths,
-  config filenames, private-package references seen in
-  `migration/analysis/units.tsv`), compare against each candidate's "app
-  types this domain skill covers" and "private package documentation"
-  sections, rank the best match as the recommendation. If
-  `migration/clarify/.headless-test` doesn't exist, use `AskUserQuestion` to ask the
-  human which one (candidates + recommendation + reasoning); if it exists,
-  check `migration/clarify/.headless-test-domain-skill` first (see the Headless test
-  protocol section above) before falling back to the normal
-  self-decide/ambiguity logic:
-  - Present and its content matches one of the candidates found above → use
-    it directly, skip the self-decide/ambiguity comparison entirely (a
-    forced test override, not a recommendation — no fingerprint match
-    needed to justify it). Log the pick to `migration/clarify/decision-log.md`
-    exactly as any other headless decision, explicitly noting it was a
-    forced test override rather than a self-decided pick, `STATUS: decided`.
-  - Present but its content names something that isn't one of the
-    candidates found above → this is a fixture/test misconfiguration, not a
-    real ambiguity. Log the mismatch to `migration/clarify/decision-log.md`,
-    `STATUS: needs-human`, stop — don't silently ignore the override or
-    silently fall back to self-deciding instead.
-  - Not present → follow the Headless test protocol's normal
-    self-decide/ambiguity logic.
-- Once decided, write it into `migration/clarify/RULEBOOK.md` frontmatter
-  (`domain_skill` field). If the file doesn't exist yet, create a
-  frontmatter-only skeleton here with the body left blank (e.g.
-  `---\ndomain_skill: <name>\n---\n\n# Rulebook\n`) — sections 3, 4, and 6
-  below will progressively fill in the `ground_truth_tier`/
-  `ground_truth_reason`/`target_shape` frontmatter fields and the rule body;
-  you don't write the whole rulebook here.
+- A section says "same as skill `<name>`" (bare skill name) → load that
+  skill's content with the Skill tool; it's independently-maintained
+  target-side shared knowledge, not something this domain skill forgot to
+  fill in. Treat it as inline from here on.
+- A section gives a relative path instead (has a `/`, usually `.md`) →
+  content moved to a reference file in that domain skill's own folder
+  (oversized content, see `domain-template`) — Read it directly, don't
+  load it as a skill. Treat it the same way once read.
 
-Batch reminder: this record belongs to **this repo**, not shared across
-repos. The same batch of "same kind" legacy apps (using the same
-domain-skill/template) is usually split into many separate repos/checkouts,
-each a brand-new `migration/` directory — ask again every time, don't
-silently decide per-repo without confirmation. Because the code
-characteristics within a batch tend to look alike, the human is usually just
-confirming the recommendation, not starting from scratch.
+## 2. Gap inventory
 
-## 2. Load domain skill content
-
-Read in: private package documentation, UI/scope conventions (if written),
-template project, syntax-conversion/library-replacement rules, target
-language library docs, test/build method. These feed every later section
-and the three conversion-stage subagents.
-
-If the template-project / target-language-library-docs / test-build-method
-sections say "same as skill `<name>`" instead of inline content, use the
-Skill tool to load that skill's actual content — it's target-side shared
-knowledge maintained independently, possibly useful outside migration too
-(see `domain-template`), not something the selected domain skill forgot to
-fill in. Once loaded, treat it as if it were inline in this domain skill, and
-pass it along to every later section and the three subagents the same way.
-
-If a section instead gives a relative path (e.g. "see
-`references/private-package.md`" — has a `/`, usually a `.md` extension,
-unlike the "same as skill `<name>`" pattern which is a bare skill name):
-that means the content was too large and got moved to a reference file
-inside that domain skill's own folder (see `domain-template`'s "when a
-single domain skill's content is too large" section) — not another skill.
-Read that relative path directly with the Read tool (relative to that domain
-skill's own folder), don't try to load it as a skill name. Treat it the same
-way once read in.
+Scan `migration/analysis/units.tsv` for places the target language forces
+an explicit decision the source left implicit (ownership, nullability,
+interface contracts); write `migration/clarify/inventory.tsv` — a lookup
+table for agents, not something a human reads end to end.
 
 ## 3. Decide how to get ground truth (three tiers — human decides, not the agent)
 
-The conversion stage's test-writer agent needs "what the old code actually
-does" as its assertion basis — but this machine may not have the old
-language's runtime available. **This must be settled here, not left for the
-test-writer agent to discover and improvise on its own**: it has actually
-happened that a test-writer found no Delphi compiler and ran `brew install
-fpc` to install one itself — unacceptable; installing software or changing
-the environment is the human's call, not something an agent can act on.
+The test-writer agent needs "what the old code actually does" as its
+assertion basis, but this machine may lack the old runtime. **Settle this
+here — never leave it for the test-writer to improvise**: installing
+software or changing the environment is the human's call, not an agent's
+(this has happened: a test-writer with no Delphi compiler ran `brew
+install fpc` itself).
 
-Check in order which tier applies to this batch (or repo):
+Check in order:
 
-1. **A usable runtime environment exists**: check the domain skill's "source
-   language runtime environment" section for how to invoke it; if unwritten,
-   or the documented method fails on this machine, probe read-only (e.g.
-   `which <compiler>`, query only, never install) to see if one's already
-   present. Found → write the exact invocation into `RULEBOOK.md`
-   frontmatter's `ground_truth_reason`, `ground_truth_tier` = `environment`.
-2. **No environment: ask the human for mock data / snapshots**: request
-   input/output examples, existing test cases, or production data snapshots
-   for this code, store them under `migration/clarify/behavior-snapshots/`,
-   `ground_truth_tier` = `snapshot`. Second choice, but closer to most real
-   migrations — many legacy systems simply can't be installed in a migration
-   sandbox.
+1. **Runtime environment exists**: use the domain skill's "source language
+   runtime environment" section, or probe read-only (`which <compiler>`,
+   never install). Found → record the invocation in `ground_truth_reason`,
+   `ground_truth_tier: environment`.
+2. **No environment, ask for mock data**: input/output examples, test
+   cases, or production snapshots, stored under
+   `migration/clarify/behavior-snapshots/`, `ground_truth_tier: snapshot`.
+   Closer to most real migrations — many legacy systems can't be installed
+   in a sandbox.
 3. **Neither available, last resort**: explicitly confirm with the human
-   "this batch accepts behavior inferred from reading docs/code, with no
-   real execution or human-provided data to verify it," `ground_truth_tier`
-   = `inference`, and record the human's agreed reasoning and date in
-   `ground_truth_reason` — a risk-acceptance decision that must leave a
-   trace, never a silent default or an after-the-fact admission.
+   that this batch accepts inferred behavior with no execution or
+   human-provided data, `ground_truth_tier: inference`, record the agreed
+   reasoning and date in `ground_truth_reason`.
 
-Write the chosen tier into `RULEBOOK.md` frontmatter's `ground_truth_tier`/
-`ground_truth_reason` fields; the test-writer agent reads this file to decide
-what to do — it never judges this itself, and never fixes the environment
-itself.
+Write the tier + reason into `RULEBOOK.md` frontmatter — **create the file
+now if it doesn't exist yet** (frontmatter-only skeleton, e.g.
+`---\nground_truth_tier: <tier>\n---\n\n# Rulebook\n`; body filled in by
+section 4 below). The test-writer reads this file and never judges or
+fixes the environment itself.
 
-In headless mode (`migration/clarify/.headless-test` exists), if tier 1 (runtime
-environment) probing fails and `migration/clarify/behavior-snapshots/` has no usable
-material, **default straight to `ground_truth_tier: inference`**, with
-`ground_truth_reason` = "automated test environment, no source-side runtime
-or behavior snapshot available," and don't stop — a deliberately relaxed test
-default, different from the general rule that "neither available" is a last
-resort requiring explicit human agreement; only applies when the marker file
-exists.
+### Decide whether to add a parity check (optional) [decision point]
 
-### Decide whether to add a parity check (optional, only ask if `ground_truth_tier` isn't `inference`)
+The current verification is a **one-sided assertion** — test-writer bakes
+observed old behavior into a fixed assertion; verification never re-runs
+the old system live to diff against it. Catches "new code fails its own
+assertion," not "the assertion was wrong to begin with."
 
-The current verification method is a **one-sided assertion**: the
-test-writer observes old behavior once and bakes it into a fixed new-language
-test assertion; verification later only checks the new code against that
-assertion, never re-runs the old system live to diff against it. Good enough
-for most batches, but it can't catch "is this assertion actually a correct
-reflection of the old behavior."
+- Applies only if: `ground_truth_tier` is `environment` or `snapshot`.
+  `inference` has no baseline to diff against — skip without asking.
+- Ask: spend extra to build a validated referee — run old and new on the
+  same real inputs post-conversion and mechanically diff, beyond each
+  unit's own tests and the integration check?
+- Record target: `RULEBOOK.md` frontmatter's `parity_check` field
+  (`enabled`, or omit — default off); see `migration-convert`'s "Parity
+  check" section for how it runs.
 
-When `ground_truth_tier` is `environment` or `snapshot` (real old behavior
-exists as a baseline), ask the human once with `AskUserQuestion`: "Beyond
-each unit's own tests and the final integration check, do you want to spend
-extra to build a **validated** referee after all units are converted — run
-old and new systems on the same real inputs and mechanically diff the
-output, rather than just checking the new system is internally
-consistent?" `inference` tier has no real old behavior to use as a baseline
-— skip this without asking.
+## 4. Draft the rulebook with the human [decision point, one ask per functionality group]
 
-Record the answer in `migration/clarify/RULEBOOK.md` frontmatter's `parity_check`
-field (`enabled`, or omit — default off). This is a cost/value decision, not
-a default — see `migration-convert`'s "Parity check" section for how it runs
-once all units are converted.
+Seed rules: the domain skill's "syntax conversion / library replacement
+rules" — already decided, don't revisit.
 
-## 4. Draft the rulebook with the human
+- Evidence, two sources — a functionality group can come from either, and
+  counts the same way once grouped:
+  - `migration/analysis/depmap/external-refs.tsv` (refs unresolved to a
+    local file — native + private-package calls mixed, unclassified; see
+    `migration-analyze`).
+  - `migration/analysis/depmap/library-substitution-candidates.tsv` — local
+    code that reimplements a target-library capability by hand (a hand-rolled DB
+    connection instead of the library's DB-access function, ad-hoc hashing
+    instead of its crypto function, print/file logging instead of its
+    structured logging — whatever the target library's own docs actually
+    name as a capability), invisible to `external-refs.tsv` since it's not
+    an external reference at all. This is a high-level "which library
+    realizes this" question just like the external-ref case, so it gets the
+    same treatment here, not left for the translator to notice
+    mid-conversion. Already computed by `migration-analyze`'s
+    `migration-unit-scanner` dispatches (one read of the source doing both
+    risk assessment and this at once) — just read the file, don't re-scan
+    the code yourself.
+  Group by **functionality performed**, not literal call text — two
+  different-looking things doing the same thing share a group. Drop groups
+  that are clearly unambiguous (string/date formatting, collection ops) —
+  any translator would do them the same way regardless of library.
+- Options (per remaining group): a library call from section 1's loaded
+  knowledge that realizes it, or "custom logic, no library, plain syntax."
+  Already covered by the domain skill's seed rules (anywhere, not just the
+  rules table) → not a gap, already decided.
+- Ask: once per group, never per occurrence, never left to the translator
+  — this is a high-level call (which library realizes this capability),
+  and a different guess per unit would translate the same functionality
+  inconsistently across the batch. Recommend your proposed mapping with
+  the group's occurrence count as evidence.
+- Record target: add the mapping to `RULEBOOK.md`'s body, tagged
+  `[repo-specific]` (only makes sense for this codebase) or
+  `[domain-general]` (really belongs in the domain skill, this repo just
+  surfaced it first — feeds "Done when"'s candidate list).
 
-Start from the domain skill's "syntax conversion / library replacement
-rules" as seed rules — already decided, no need to revisit. Only discuss
-with the human the translation decisions **specific to this codebase and not
-covered by the domain skill**: read out places in the codebase where "two
-agents might make different choices" (backed by data, e.g. "this pattern
-appears N times"), decide them one at a time with the human, and add them to
-`migration/clarify/RULEBOOK.md`'s body (section 1 already created a frontmatter-only
-skeleton; this is filling in the body after the frontmatter, not creating a
-new file).
+Rulebook is read-only from here on — none of the three conversion-stage
+agents may edit it; amendments come from a human between batches.
 
-**Also read `migration/analysis/depmap/external-refs.tsv` as a second
-evidence source**: these are references the analysis stage recorded that
-don't resolve to a local file, native standard-library calls and private
-packages mixed together with no classification (see `migration-analyze` —
-that classification is a judgment call, not something the analysis stage
-should do). After deduping and counting occurrences, **use your own
-knowledge of the source language to filter first**: skip anything whose
-translation is clearly unambiguous (string/date formatting, collection
-operations — anything any conversion agent would translate the same way).
+## 5. Decide target project shape (optional) [decision point]
 
-For what's left, check whether the domain skill already covers it — **check
-both the "private package documentation" section and the "syntax
-conversion / library replacement rules" table, not just one**:
-- "Private package documentation" names the **package itself** (a DLL
-  filename, a COM component name, e.g. `Dept200Common.dll`) — this is the
-  case where an externally-provided private package with no source in the
-  repo shows up in `external-refs.tsv` (a private package whose source IS in
-  the repo, like `Dept200Data.pas`, resolves to a local file and never
-  appears in this list — it's handled by the existing "identify private
-  package itself" mechanism below, unrelated to this check).
-- The "syntax conversion / library replacement rules" table's left column
-  holds **specific API call snippets** (e.g. `Conn.Query(sql,
-  Array(...))`), not package names — matching an `external-refs.tsv` name
-  string against this table usually won't hit, so it alone can't tell you
-  "is this covered."
+Some target languages have more than one project-template convention (e.g.
+Python's "FastAPI service" vs "background ETL batch" shapes, each its own
+directory structure/entry point/integration check, under the same template
+skill's different sections).
 
-Checking only the rules table misses one case: the package name was already
-named in "private package documentation," and the target side already has a
-matching `corplib` to use directly — the rules table just never repeated the
-package name in its own row. That's not a real gap; checking only the rules
-table would misjudge it as "domain skill doesn't cover this" and raise a
-false alarm. Only when **both** sections miss it is it a real candidate —
-native or private, as long as it meets both "domain skill mentions it in
-neither section" and "not obviously safe to translate" — raise it as a
-candidate with its occurrence count as evidence, decided the same way as
-every other rulebook item (it might be "domain skill missed a rule," or it
-might be "this batch really does have an undocumented private package") — no
-separate report or sign-off needed for this list.
+- Applies only if: the domain skill's "template project" section lists more
+  than one option. A single "same as skill `<name>`" → no divergence, skip
+  entirely, don't write `target_shape`.
+- Evidence / options: the domain skill's listed shapes.
+- Ask: which shape applies to this migration (one manifest, one shape,
+  never per unit). If the human says the manifest genuinely mixes two
+  shapes, that means splitting into two migration instances, not mixing
+  shapes in one manifest.
+- Record target: `RULEBOOK.md` frontmatter's `target_shape`, formatted
+  `<template skill name>: <shape name>` (the shape name copied verbatim
+  from that skill's own `## Project shape: <name>` heading, e.g.
+  `python-template: background ETL batch`) — the skill name alone doesn't
+  disambiguate which shape, and this holds whether `domain_skill` points at
+  the template indirectly ("same as skill `<name>`") or *is* the template
+  directly. This value decides which skeleton `migration-convert` scaffolds
+  from.
 
-**Tag each new rule you add to the body as `[repo-specific]` or
-`[domain-general]`** — this is a judgment call you make alongside the human
-when deciding the rule, not extra process: `[repo-specific]` means it only
-makes sense because of something particular to this one codebase (a naming
-quirk, a one-off legacy workaround); `[domain-general]` means it's really a
-fact about the domain skill's own private package/library that any app using
-it would hit the same way, this repo just happened to be the first to
-surface it. This tag is what feeds the "Done when" section's list of
-domain-skill-worthy candidates — it isn't just bookkeeping.
+## 6. Confirm target-side prerequisites
 
-The rulebook is read-only for the rest of this session once done — none of
-the three conversion-stage agents may edit it; amendments after this point
-are made by a human between batches.
+Decides/confirms, doesn't build — scaffolding (`target/` directory
+structure, build config) is `migration-convert`'s job, pure mechanical
+execution of what's already decided. Don't create files under `target/`
+here.
 
-## 5. Gap inventory
-
-Scan `migration/analysis/units.tsv`, list the places where the target
-language forces an explicit decision that the source language could leave
-implicit (ownership, nullability, interface contracts), write
-`migration/clarify/inventory.tsv`. A table for agents to look things up in, not
-something a human is meant to read end to end.
-
-## 6. Decide target project shape (optional, only if the domain skill's template section lists more than one option)
-
-Some target languages don't have a single project-template convention — e.g.
-target Python might internally have both a "FastAPI service" shape and a
-"background ETL batch" shape, each with its own directory structure, entry
-point, and integration-check method, mapped to different sections under the
-same template skill (e.g. `python-template`'s "Project shape: FastAPI
-long-running service" / "Project shape: background ETL batch" sections).
-
-If the selected domain skill's "template project" section lists more than
-one option, use `AskUserQuestion` to confirm with the human which shape
-applies to **this migration (this `migration/` directory, this
-manifest)** — same as domain-skill selection, one manifest is always one
-shape, never decided per unit. (If `migration/clarify/.headless-test` exists, follow
-the Headless test protocol instead of calling `AskUserQuestion`.) If the
-human tells you this migration's manifest genuinely mixes two shapes, report
-that back: it means this repo should split into two separate migration
-instances (each its own `migration/` directory), not mix shapes in one
-manifest.
-
-Once decided, write it into `migration/clarify/RULEBOOK.md` frontmatter's
-`target_shape` field (value: template skill name). This field decides which
-template skeleton `migration-convert` scaffolds the target project from and
-which template knowledge it feeds the three subagents.
-
-If the domain skill's "template project" section only has a single "same as
-skill `<name>`" (no listed options), this target language has no shape
-divergence in this batch — skip this section, don't ask the human, don't
-write `target_shape`.
+If the template project declares external target-side packages, confirm
+read-only whether they're installed. For Python, **check by actually
+importing it** (e.g. `python -c "import boogie_sdk"`), not `pip show`/`uv
+pip show` — a workspace-member or editable/path install is genuinely
+usable but reports as "not found" there anyway, a false negative
+indistinguishable from a real missing dependency. Other ecosystems: `test
+-d node_modules` or the equivalent is fine. Missing → **stop, tell the
+human the install command** — same red line as ground truth: don't install
+it yourself. Rerun once installed; `migration-convert` re-confirms in its
+own pre-flight anyway since time may
+pass. Nothing declared → nothing to do.
 
 ## 7. Copy source locally, fill in target_path, produce the full manifest
 
-Read `migration/analysis/units.tsv` — its `source_path` is wherever
-`migration-analyze` saw it during scanning, not guaranteed to sit under this
-migration's own working root (could be a source repo kept elsewhere, even a
-read-only mount). **Copy each unit's source file into this migration's own
-`legacy/` directory** (preserving `units.tsv`'s relative path structure;
-when sources are scattered across many unrelated directories, flattening to
-`legacy/<filename>` is fine too, as long as nothing collides across the
-whole batch).
+`units.tsv`'s `source_path` may sit outside this migration's own root
+(external repo, read-only mount) — **copy each unit's source into this
+migration's own `legacy/` directory** (preserve relative paths; flattening
+to `legacy/<filename>` is fine if nothing collides). Keeps `migration/`
+self-contained and trustworthy independent of the source repo's later fate.
 
-Reasoning: this migration's whole working directory (`migration/`,
-`legacy/`, `target/`) needs to be self-contained — movable, archivable, and
-comparable against other migration runs as a unit, without depending on the
-external source repo staying put at the same relative paths. If that repo
-later gets updated, moved, or even deleted, this migration's completed
-analysis and decisions stay fully trustworthy — no risk of missing files or
-(worse) silently matching against a different version.
-
-After copying, decide `target_path` for each row per the template project's
-naming convention (if "decide target project shape" set one, follow the
-template skill it names via `RULEBOOK.md` frontmatter's `target_shape`
-field; otherwise follow the domain skill's template-project section
-directly). **Fill in the `target_path` column in place on
-`migration/analysis/units.tsv` itself, change `source_path` to the copied
-local `legacy/...` path, then rename/move this file to
-`migration/clarify/manifest.tsv`** — don't write a fresh file and leave `units.tsv`
-sitting untouched under `migration/analysis/` — that would turn one set of
-content into two files that need to stay in sync; `units.tsv` shouldn't
-exist anymore once this step is done. Keep `units.tsv`'s existing
-`cycle_group`/`order_index`/`risk_flag`/`risk_reason` columns in
-`manifest.tsv` — the three subsections below and section 9's pilot selection
-still need them; `migration-convert` only looks at the
-`unit_id`/`source_path`/`target_path` columns it needs, and the extra
-columns don't affect it.
+Decide `target_path` per row using the template's naming convention
+(`target_shape`'s template if set, else the domain skill's template-project
+section directly). **Fill `target_path` in on `units.tsv`, rewrite
+`source_path` to the local `legacy/...` copy, then rename the file to
+`migration/clarify/manifest.tsv`** — one file, not two kept in sync;
+`units.tsv` shouldn't exist after this step. Keep the existing
+`cycle_group`/`order_index`/`risk_flag`/`risk_reason` columns — section 8
+reads `risk_flag` to pick the pilot, and all four stay for human
+traceability (why a unit was flagged) even where nothing downstream reads
+them; `migration-convert` doesn't mind extra columns either way.
 
 ### Identify "private package itself" units — mark `excluded`, keep out of the conversion queue
 
-If the domain skill (or a source-side shared skill it references) names
-specific implementation files in its "private package documentation"
-section, match each unit's `source_path` filename in `migration/clarify/manifest.tsv`
-against them (`units.tsv` has already been renamed into `manifest.tsv` by
-now — `cycle_group` and the other columns are still in the same file, no
-need to open another one). An exact match means this unit **is** the private
-package's own source, not application logic to translate — the target side
-already has a matching `corplib` replacement, so translating it line by line
-is pointless; only the calling units need their calls rewritten to use
-`corplib` instead.
+If the domain skill names specific implementation files in its "private
+package documentation" section, match unit `source_path` filenames in
+`manifest.tsv` against them exactly. A match **is** the package's own
+source, not application logic — the target already has a `corplib`
+replacement, translating it line by line is pointless; only calling units
+need their calls rewritten.
 
-Leave `target_path` blank for such units (or write `(excluded — replaced by
-<skill name>)`), and immediately write `migration/convert/state/<unit_id>.json`
-with `status` set directly to `excluded` (not `pending`), `last_note`
-stating which skill replaced it. Log this decision in `RULEBOOK.md` (same
-as any other batch-specific decision — visible reasoning), don't do it
-silently, and don't invent judgment beyond the rule — only files the domain
-skill explicitly names can be marked this way, don't expand the scope on
-your own judgment.
+**Leave `target_path` blank** — that alone is the signal `migration-convert`
+reads to mark `excluded` itself; you never touch
+`migration/convert/state/`. Log which skill replaced it in `RULEBOOK.md`
+instead, for the human-facing trail. Only exact-named files qualify — don't
+expand scope on your own judgment.
 
-No such units exist if the domain skill doesn't name the private package
-down to file level (e.g. it only describes an externally-provided compiled
-COM DLL with no matching source file in the repo) — the private package's
-calls just appear directly in application code, `migration-analyze` never
-scans it as a separate unit, nothing special to do.
+Nothing to do if the domain skill doesn't name the package down to file
+level (e.g. a compiled COM DLL with no matching source) — its calls just
+appear inline, never as a separate unit.
 
-### Identify UI/presentation-layer units — ask the human whether to keep them
+### Identify UI/presentation-layer units — ask the human whether to keep them [decision point]
 
-Some legacy apps have a UI layer (VB6 `.frm`, Delphi `.dfm`/form units, or
-`uses`/`import` clauses referencing UI framework units like
-`Vcl.Forms`/`Vcl.Controls`/`Forms`/`Controls`) — different from private-package
-exclusion: whether to keep the UI layer is a **scope decision**, not a
-technical fact like "the target side already has an equivalent," the domain
-skill can't decide this for you, always ask the human.
+UI layer (VB6 `.frm`, Delphi `.dfm`/form units, `Vcl.Forms`/`Vcl.Controls`
+etc.) is a **scope decision**, not a technical fact — the domain skill
+can't decide it for you.
 
-If `migration/clarify/manifest.tsv` has units that look like UI layer, use
-`AskUserQuestion` to ask the human whether this whole migration should
-"keep the UI (convert it along with everything else — meaning the selected
-domain skill needs matching target-side UI framework knowledge, covered in
-its template-project/target-language-library-docs sections; if it doesn't,
-report that back — this domain skill needs more UI framework knowledge, or
-the wrong one was picked)" or "drop the UI, convert only the core logic."
-Same as "decide target project shape" — ask once for the whole batch, never
-per unit. If the selected domain skill has a "UI/scope conventions" section,
-read it in and present its recorded convention and reasoning as the
-recommended option (e.g. "the domain skill records that this department's
-convention is to drop the UI, for this reason — apply the same here?") —
-this section only sharpens the question, **it can never replace this human
-confirmation step**; if unwritten, ask plainly with no recommendation. (If
-`migration/clarify/.headless-test` exists, follow the Headless test protocol instead
-of calling `AskUserQuestion` — in that case, the "UI/scope conventions"
-section content is exactly the evidence used to rank the recommendation, use
-it directly.)
+- Applies only if: `manifest.tsv` has units that look like UI layer (skip
+  otherwise — e.g. pure batch/CLI batches).
+- Evidence / recommendation: the domain skill's "UI/scope conventions"
+  section, if written — sharpens the question, **never replaces the human
+  confirmation**; ask plainly if unwritten.
+- Ask (once for the whole batch, never per unit): keep the UI (needs
+  matching target-side UI framework knowledge — report back if the domain
+  skill lacks it) or drop it (core logic only)?
+- Record target — drop: leave `target_path` blank (same mechanism as
+  private-package exclusion — `migration-convert` marks it `excluded`
+  itself), log the reason in `RULEBOOK.md`. **A unit whose UI handler mixes
+  in business logic can't be excluded wholesale** — log it so the
+  conversion agent extracts only the business-logic part.
 
-**Drop the UI**: mark these units `excluded` (same mechanism as
-private-package exclusion, `last_note` = "UI layer, human decided not to
-migrate, see RULEBOOK.md"), and log this decision in `RULEBOOK.md` (with
-date and reasoning) — a scope-reduction decision that needs a paper trail
-just like a rule decision, never a default, never your own call. **A unit
-whose UI event handler mixes in business logic (e.g. a `ButtonClick` event
-that both updates the screen and writes to the DB) can't just be marked
-`excluded` wholesale** — log this case in `RULEBOOK.md` so the conversion
-agent knows to extract only the business-logic part and drop only the
-UI-triggered part, not an all-or-nothing choice per unit.
+### Identify units with pre-existing manual work — ask the human whether to keep them [decision point]
 
-Skip this section without asking if no UI-layer units are detected (e.g.
-this batch is pure batch/CLI tooling, like the department 200/300 simulated
-scenarios).
+After filling `target_path`, check: the path **already has a non-empty
+file**, and `migration/convert/state/<unit_id>.json` **doesn't exist yet**
+— someone put something there before this kit ran. (Different from
+`migration-convert`'s scaffold idempotency, which only protects directory
+structure/build config, not per-unit code.)
 
-### Identify units with pre-existing manual work — ask the human whether to keep them
+- Applies only if: qualifying units exist.
+- Evidence: list `unit_id` + `target_path` + `source_path` so the human
+  sees the scope.
+- Ask: trust it? Whole batch or per unit, three options:
+  1. **Trust as-is** — `migration-convert` will run none of the three
+     agents and mark it `pass` directly, listed separately from real
+     passes in the final burndown.
+  2. **Trust but verify** — test-writer runs normally, translator is
+     skipped, test-reviewer reviews the existing file directly; only asks
+     about retranslating if review fails.
+  3. **Retranslate** — normal processing, will overwrite. **Explicitly
+     warn the human it'll overwrite the existing file and get
+     commit/backup confirmation first.**
+- Record target: a `manual_work` column on `manifest.tsv` for these units
+  (`trust-as-is` / `trust-verify` / `retranslate`) — the single field
+  `migration-convert` branches on. Don't write anything under
+  `migration/convert/state/`; that's `migration-convert`'s own working
+  area, not yours to touch.
 
-After filling in `target_path` for every row, additionally check: this
-`target_path` **already has a non-empty file**, and `migration/convert/state/<unit_id>.json`
-**doesn't exist yet** (meaning this kit's own pipeline never touched this
-unit) — a signal that someone put something there manually (or otherwise)
-before this kit ever got involved. Different from what `migration-convert`'s
-scaffold-building idempotency protects (that protects directory
-structure/build config files, not per-unit code files).
+## 8. Mark the pilot subset
 
-Whether to trust this existing work is a scope decision neither the domain
-skill nor this skill can make for you — always ask the human. List the full
-set (`unit_id` + `target_path` + matching `source_path`) so the human sees
-the scope clearly, then ask with `AskUserQuestion` — they can answer for the
-whole batch at once, or per unit if they prefer:
-
-1. **Keep it, trust it as-is** — write `status: pass` directly into
-   `migration/convert/state/<unit_id>.json`, `last_note` = "manually pre-completed,
-   human confirmed keep, never went through this kit's tests/review." The
-   final burndown report must **list these separately from normal pipeline
-   passes** — their confidence level differs from a pass that actually went
-   through test-writer/reviewer, and the human needs to see that
-   distinction.
-2. **Keep it, but require verification** — test-writer runs as normal
-   (getting real behavior per `ground_truth_tier`), **skip
-   migration-translator**, go straight to test-reviewer reviewing the
-   existing code; only if it fails do you ask the human whether to hand it
-   to the kit for a fresh translation. The safest option: neither blind
-   trust nor destroy-first. Record this decision in
-   `migration/convert/state/<unit_id>.json`'s `last_note` (e.g. "manually
-   pre-completed, pending verification, skip conversion step") —
-   `migration-convert` uses this note to decide whether to skip the
-   conversion step.
-3. **Don't trust it, let the kit retranslate** — proceed as normal
-   `pending`, `migration-convert` will overwrite the existing file.
-   **Explicitly tell the human this will overwrite the existing file, and
-   they must confirm it's committed/backed up first** — don't assume this
-   on the human's behalf; say so plainly in your report and let them confirm
-   before continuing.
-
-Skip this section without asking if no qualifying units are detected.
-
-## 8. Confirm target-side prerequisites
-
-This section decides/confirms, it doesn't build — actually constructing the
-target project's scaffold (directory structure, build config files) is
-`migration-convert`'s job now (its pre-flight checklist), since that's pure
-mechanical execution of what's already decided here, not a judgment call
-that needs your involvement. Don't create any files under `target/` in this
-section.
-
-What you do here: if the selected template project (same as "copy source
-locally, fill in target_path, produce the full manifest" — if `RULEBOOK.md`
-frontmatter has a `target_shape` field, use the template skill it points to)
-declares external packages needed on the target side, confirm read-only
-(e.g. `test -d node_modules`, `pip show <pkg>`) whether they're already
-installed. If not, **stop and tell the human which install command to run
-manually** — don't install anything yourself — same red line as "how to get
-ground truth"'s "can't install things yourself," just on the target-language
-side. Rerun this section to confirm once the human has installed it. This is
-an early heads-up for the human, not the last check — `migration-convert`
-re-confirms the same thing in its own pre-flight before it actually runs,
-since real time may pass between this step and that call.
-
-Nothing to confirm (purely standard-library target) → nothing to do here,
-move on.
-
-## 9. Mark the pilot subset
-
-Add a `pilot` column to `migration/clarify/manifest.tsv` (values `yes`/`no`), mark
-2-3 units `yes` from it — prioritize units with `risk_flag` = `high`, pair
-with one typical/ordinary unit — mark everything else `no`. This subset is
-what the conversion stage runs first: the rulebook hasn't been validated
-against the whole batch yet, and if a rule has a systematic error, running
-the pilot first contains the cost before it's spent on every unit.
-
-Don't open a separate `pilot-manifest.tsv` file — that would turn the same
-`unit_id`/`source_path`/`target_path` content into two records that need to
-stay in sync. The `pilot` column is just one more column on `manifest.tsv`;
-`migration-convert` filters its scope by this column, not by a separate file.
+Add a `pilot` column to `manifest.tsv` (`yes`/`no`), mark 2-3 units `yes`
+— prioritize `risk_flag: high`, pair with one ordinary unit. This runs
+first so a systematic rulebook error gets caught before it's spent on
+every unit. One column on `manifest.tsv`, not a separate file —
+`migration-convert` filters by it.
 
 ## Done when
 
-Once all nine sections above are done, **you must always stop**, report the
-full artifact list (`RULEBOOK.md` — including its frontmatter's
-`domain_skill`/`ground_truth_tier`/`ground_truth_reason`/`target_shape` (if
-that section applied)/`parity_check` (if enabled) fields, inventory, mismatch
-report if any, manifest (with its `pilot` column), target-side prerequisite
-status (packages confirmed installed, or what the human still needs to
-install), and the list of any detected "pre-existing manual work" units with
-their decisions).
+All eight sections done → **always stop**, report the full artifact list:
+the domain skill in use (from the root `CLAUDE.md`), `RULEBOOK.md`
+(frontmatter's `ground_truth_tier`/`ground_truth_reason`/`target_shape` if
+applicable/`parity_check` if enabled), inventory, manifest (with `pilot`),
+target-side prerequisite status, and any pre-existing-manual-work units
+with their decisions.
 
-List every `[domain-general]`-tagged rule from section 4 as its own item,
-naming the domain skill file it's a candidate for (`.claude/skills/<domain
-skill name>/SKILL.md`'s "syntax conversion / library replacement rules"
-table). This is the only place this list surfaces — it isn't written to any
-file, just called out in this report, since deciding whether to actually
-fold a rule into the domain skill is a human judgment made between batches,
-not something this run's artifacts need to track. **You never edit the
-domain skill file yourself, regardless of how confident the tag is** — same
-boundary as the rulebook itself, just on department-owned content instead of
-this repo's own.
+List every `[domain-general]`-tagged rule from section 4, naming the domain
+skill file it's a candidate for — only surfaced in this report, not written
+to any file, since folding it in is a human call between batches. **Never
+edit the domain skill file yourself**, however confident the tag.
 
-Don't auto-proceed to conversion — only after a human reviews these
-decisions does the top-level orchestrator take `manifest.tsv`'s `pilot=yes`
-rows to run `migration-convert`.
+Don't auto-proceed — only after human review does the orchestrator run
+`migration-convert` on `pilot=yes` rows.
 
-Add one reminder to your report: if this is the first run on this repo,
-`.claude/settings.json` + `.claude/hooks/` should be copied over now (see
-`migration`'s "before you start" section) so the syntax-check hook is in
-place from the first pilot unit — not a hard prerequisite `migration-convert`
-blocks on, but better done now than partway through. You don't check for or
-create these files yourself — this is just a reminder, not your job.
+Reminder if this is the first run on this repo: `.claude/settings.json` +
+`.claude/hooks/` should be copied over now (see `migration`'s "before you
+start") so the syntax-check hook is active from the first pilot unit — not
+a hard blocker, just better done early. Not your job to create these.

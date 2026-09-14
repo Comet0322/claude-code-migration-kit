@@ -4,9 +4,11 @@ superpowers/
 __pycache__/
 
 # build output for the template skills' vendor/ test-infrastructure
-# packages (corplib stand-ins) — keep the source, not the build artifacts
+# packages (boogie-sdk-java/boogie-sdk-python) — keep the source, not the
+# build artifacts
 .claude/skills/*/vendor/*/target/
 **/*.egg-info/
+**/.pytest_cache/
 .venv/
 *.sqlite3
 

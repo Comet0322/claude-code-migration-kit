@@ -12,71 +12,67 @@ description: >
 
 You do exactly three things: **queue, dispatch to the right agent, record
 results.** Understanding the old code, writing tests, translating code,
-running and reviewing tests — all of that belongs to the three subagents
-(`migration-test-writer` / `migration-translator` / `migration-test-reviewer`).
+running and reviewing tests all belong to the three subagents
+(`migration-test-writer`/`migration-translator`/`migration-test-reviewer`).
 You don't read code details yourself, and you don't judge whether a
 translation is correct — that's the reviewer's job.
 
 ## Calling convention
 
-The caller (top-level orchestrator or a human) always passes
-`migration/clarify/manifest.tsv`, and clearly states this call's **scope**: **only
-rows where `pilot` is `yes`**, or **all rows** (`pilot` unrestricted). The
-first round (before pilot sign-off) gets the pilot-only scope; calls after
-sign-off get the full scope. **Either way, you only process units with
-`status: pending`** — anything already `pass`/`fail-*`/`excluded` is always
-skipped, so a "full scope" call in practice only touches units the pilot
-never covered, it won't redo units already `pass`. Whether to widen from
-pilot to full scope is the caller's sign-off decision, not your logic.
+The caller always passes `migration/clarify/manifest.tsv` and states this
+call's **scope**: rows where `pilot` is `yes`, or all rows. First round
+(before pilot sign-off) gets pilot-only; calls after sign-off get full scope
+— widening is the caller's decision, not yours. Either way, **you only
+process units with `status: pending`** — `pass`/`fail-*`/`excluded` are
+always skipped, so a full-scope call in practice only touches units the
+pilot never covered.
 
 ## Pre-flight checks (stop if incomplete — don't fill gaps yourself)
 
-1. Manifest file exists, and every row has `unit_id` / `source_path` /
-   `target_path` (`pilot`/`cycle_group`/`risk_flag`/`risk_reason` are
-   leftovers from the analysis/clarification stages — extra columns don't
-   affect this check).
-2. `migration/clarify/RULEBOOK.md` (frontmatter must have `domain_skill`,
-   `ground_truth_tier`, `ground_truth_reason`) and `migration/clarify/inventory.tsv`
-   both exist.
-3. If the selected domain skill's "template project" section lists more than
-   one shape option (e.g. target Python has both a FastAPI-service and an
-   ETL-batch template skill), `migration/clarify/RULEBOOK.md` frontmatter must have a
-   `target_shape` field pointing at one — this decides which template
-   knowledge to feed the three subagents. A domain skill with only one shape
-   (no divergence) doesn't need this field. Missing it → stop, tell the
-   human to run `migration-clarify` to decide, don't guess a shape yourself.
-4. Build the target project's scaffold (directory structure, build config
-   files) per the domain skill's template-project section (and `target_shape`
-   if set) — unlike the other pre-flight items, this one you actually do,
-   not just check: `migration-clarify` only confirms/decides target-side
-   prerequisites (see its "confirm target-side prerequisites" section), it
-   never creates files under `target/`. Building the scaffold is pure
-   mechanical execution of what's already decided (target shape + manifest's
-   `target_path` values) — no judgment call needed, so it belongs here, not
-   in clarify. **Idempotent — never overwrite or destroy already-converted
-   work**; if the scaffold already exists (a prior call already built it, or
-   a human built it by hand), leave it alone.
-5. If the domain skill declares target-side packages are needed (see the
-   template-project section), confirm read-only they're already installed
-   (e.g. `test -d node_modules`, `pip show <pkg>`) — **query only, never
-   install**. Not installed → stop and tell the human what to install first
-   — don't run the install command yourself. `migration-clarify` already did
-   this same check once as an early heads-up — this is a re-confirmation,
-   not a duplicate mistake: real time can pass between that step and this
-   call, so don't skip it just because clarify already reported it
-   installed.
+1. Manifest exists, every row has `unit_id`/`source_path`, and
+   `target_path` unless it's blank (blank is a valid row, see "Unit state"
+   below). Extra columns (`pilot`/`cycle_group`/`risk_flag`/`risk_reason`/
+   `manual_work`) don't affect this check.
+2. Repo's root `CLAUDE.md` has a "Migration domain skill: `<name>`" line
+   (written by `migration` before analysis ever ran — not
+   `RULEBOOK.md`'s job). `migration/clarify/RULEBOOK.md` (frontmatter must
+   have `ground_truth_tier`, `ground_truth_reason`) and
+   `migration/clarify/inventory.tsv` both exist.
+3. Domain skill's "template project" section lists more than one shape
+   (e.g. target Python's FastAPI-service vs. ETL-batch) → `RULEBOOK.md`
+   frontmatter needs `target_shape` pointing at one; missing it, stop and
+   tell the human to run `migration-clarify` — don't guess. Single-shape
+   domain skills don't need this field.
+4. Build the target scaffold (directory structure, build config) per the
+   template-project section (+ `target_shape` if set — formatted `<skill>:
+   <shape name>`; the part after the colon matches that skill's own
+   `## Project shape: <name>` heading verbatim) — unlike the other
+   checks, you actually build this one: `migration-clarify` only
+   confirms/decides, it never creates files under `target/`. Pure
+   mechanical execution of already-decided facts (target shape + manifest's
+   `target_path` values), no judgment call, so it belongs here. **Idempotent
+   — never overwrite or destroy an existing scaffold**, whether a prior call
+   built it or a human did by hand.
+5. Domain skill declares target-side packages needed → confirm read-only
+   they're installed — query only, never install. For Python, **check by
+   actually importing it** (e.g. `python -c "import boogie_sdk"`), not
+   `pip show`/`uv pip show`: a workspace-member or editable/path install is
+   genuinely usable but `pip show` reports it as "not found" anyway — a
+   false negative that looks identical to a real missing dependency. For
+   other ecosystems, `test -d node_modules` or the equivalent is fine.
+   Missing → stop, tell the human what to run.
+   `migration-clarify` already checked this once as an early heads-up —
+   re-confirm anyway, since real time may have passed.
 
-Any item incomplete → report what's missing, STOP, don't try to generate it
-or skip it.
+Any item incomplete → report what's missing, STOP, don't generate or skip
+it.
 
-Note what's deliberately *not* on this checklist: whether `.claude/settings.json`
-has deny rules blocking `git commit`/`git push`/package installs. It
-doesn't — this kit relies entirely on the rule below (never do these things,
-no exceptions) rather than a technical block, because a repo-wide deny rule
-also blocks the human's own unrelated requests in that same repo (see
-`.claude/skills/migration/templates/settings.README.md`). Nothing technical
-stops you from running `git commit` or `pip install` here — the rule holds
-anyway.
+Deliberately *not* on this checklist: whether `.claude/settings.json` blocks
+`git commit`/`git push`/installs. It doesn't, on purpose — a repo-wide deny
+rule would also block the human's own unrelated work in that same repo (see
+`.claude/skills/migration/templates/settings.README.md`). This kit relies
+entirely on the rule itself, never a technical block — nothing stops you
+from running these commands here; the rule holds anyway.
 
 ## Red Flags
 
@@ -85,14 +81,10 @@ around a red line — stop, follow the rule instead:
 
 | Thought | Reality |
 |---|---|
-| "This is just test/setup work, it doesn't really count" | No "this time is just a test so it doesn't count" exception — this exact rule exists because it really happened: someone created `.claude/settings.json` themselves just to get a test running. Never install packages, never commit/push, never edit `settings.json`, in any situation — this holds regardless of whether anything technically stops you; there's no deny rule backing this up, the rule is the only thing standing between you and doing it. |
-| "Nothing's technically stopping me, so it's fine this once" | The absence of a `.claude/settings.json` deny rule for `git commit`/package installs is deliberate (see `migration-convert`'s pre-flight note and `settings.README.md`), not an oversight to exploit — the rule was always meant to hold on its own, a technical block was never the actual mechanism keeping it. |
-| "We'll need to install it eventually, might as well now" | Deciding what to install and when is the human's call, not an efficiency question — you're saving yourself trouble, not making a decision that's yours to make. |
-| "The prerequisites are probably fine, let's just try running it" | Stop for whatever's missing on the pre-flight checklist regardless — "probably fine" doesn't substitute for "confirmed." |
-| "This unit looks like it's already fixed by a recent rule change, let's retry" | Without a human explicitly resetting the status to `pending`, this unit stays failed forever — it never retries itself. |
-| "The domain skill didn't document an entry point, let's just pick some file and try running it" | No documented entry point → skip the "run the entry point" step in the integration check, don't invent one. |
-| "This rule gap only came up once or twice, let's just apply a rule that looks reasonable and keep going" | Pausing at 3+ occurrences is a threshold, not room for "apply something efficient first" — under 3 in the same category, keep running, but that never means you get to invent a rule on your own to fill a gap the domain skill/rulebook didn't cover. |
-| "The reviewer's verdict looks too strict/unreasonable, I'll use my own judgment" | You don't judge whether a translation is correct — the reviewer's verdict is final, accept it fully, don't second-guess it. |
+| "This is just test/setup work, it doesn't count" / "Nothing's technically stopping me" | No exception, ever — this happened: someone created `.claude/settings.json` themselves just to get a test running. There's no deny rule backing this up on purpose; the absence of a technical block was never permission. |
+| "We'll need to install it eventually" / "Prerequisites are probably fine, let's just try" | Installing, and judging "probably fine" vs. "confirmed," are both the human's call — stop for anything missing on the pre-flight checklist, no matter how minor it looks. |
+| "This rule gap only came up once or twice, let's apply something reasonable and keep going" | 3+ occurrences is a threshold, not room to invent a rule under it either — you never fill a rulebook gap yourself, at any count. |
+| "The reviewer's verdict looks too strict, I'll use my own judgment" | Not your call — the reviewer's verdict is final, full stop. |
 
 ## Unit state
 
@@ -106,252 +98,182 @@ Each unit's state lives in `migration/convert/state/<unit_id>.json`:
 }
 ```
 
-**Only process units with `status: pending` (a missing state file also
-counts as `pending`).** `pass`, `fail-conversion`, `fail-test`, `rule-gap`,
-`excluded` are all **terminal states** — skip them, never rerun, only count
-them in the final burndown. This is deliberate: otherwise every time you're
-called again, permanently-failed units would get rerun (spending another
-round of three-agent cost) even though the human hasn't fixed anything.
+**Only process units with `status: pending`** (a missing state file counts
+as pending) — with two exceptions you resolve yourself before the loop, no
+agents involved, by writing the state file directly:
+- Blank `target_path` → `status: excluded` (private package's own
+  implementation, or dropped UI layer — only calling units need
+  conversion).
+- `manual_work: trust-as-is` → `status: pass` (human already confirmed the
+  existing file needs no verification). **Report these separately in the
+  final burndown** — different confidence than a real pipeline pass.
 
-Two terminal states are **not produced by you** — `migration-clarify` writes
-both directly while completing the manifest, and you just treat them like
-any other terminal state and skip them:
-- `excluded` — this unit is the private package's own implementation,
-  already replaced by a target-side library; only the units calling it need
-  conversion.
-- `pass` for a unit clarify's "identify pre-existing manual work" section
-  marked trust-as-is — never went through this kit's tests/review at all
-  (`last_note` says so explicitly). **Report these separately from normal
-  pipeline passes in the final burndown** — a pass that skipped verification
-  entirely has different confidence than one the three-agent loop actually
-  produced, and the human needs to see that distinction, not a merged count.
+Both are `migration-clarify`'s decisions, already made when it produced the
+manifest — you're executing them, never inventing either signal yourself.
 
-You don't decide which units get either of these, and you never mark one
-yourself.
+`pass`/`fail-conversion`/`fail-test`/`rule-gap`/`excluded` are all
+**terminal** — skip on every future call, only count them in the burndown.
+Otherwise permanently-failed units would get rerun (another round of
+three-agent cost) every time you're called, even with nothing fixed.
 
-**For a human to retry a terminal-state unit**, they explicitly reset its
-state file to `status: "pending"` with `attempts` zeroed (a fresh full retry
-budget under the fixed rules), or just delete that unit's state file
-(equivalent to `pending`). **You never decide "this looks fixed, let's
-retry"** yourself — without an explicit human reset to `pending`, a unit
-stays failed forever in the burndown, waiting on the human. This especially
-applies after a "3+ rule-gap occurrences" pause: once the human fixes
-`RULEBOOK.md`, they need to mark that item resolved in
-`rulebook-amendments.md` and reset every unit paused by it back to
-`pending` before you'll reprocess them on the next call — you never
-cross-reference "which units does this fix resolve" yourself, that's the
-human's job.
+**A human retries a terminal unit** by resetting its state file to
+`status: "pending"` with `attempts` zeroed, or deleting the file. **You
+never decide "this looks fixed, retry"** yourself — no reset, no retry,
+ever. After a 3+ rule-gap pause specifically: the human fixes
+`RULEBOOK.md`, marks it resolved in `rulebook-amendments.md`, and resets
+every paused unit — you never guess which units a fix resolves.
 
 ## Model selection
 
-Always specify a model explicitly when calling the three subagents — never
-let it inherit your own model (an unspecified model silently inherits the
-caller's, usually the most expensive one, defeating this section entirely).
+Always specify a model explicitly for the three subagents — never let it
+inherit yours (an unspecified model silently inherits the caller's, usually
+the priciest, defeating this section).
 
-- **test-writer / translator, first attempt**: a mid-tier model is enough —
-  both steps are mechanical work ("translate per rulebook/domain-skill
-  rules"), and the rulebook has already converged the places where two
-  agents might choose differently, so the strongest model isn't needed.
-- **reviewer**: always mid-tier or above — it's the only quality gate,
-  judgment matters more than cost here, don't downgrade to save money.
-- **Retries (`attempts.translator` or `attempts.test_writer` ≥ 1, i.e. the
-  2nd+ attempt)**: bump to a stronger tier, don't hit the same tier against
-  it twice — surviving one retry and still failing usually means this model
-  can't see its own problem this round; a stronger model beats giving the
-  same one another try.
-- **Integration check and parity check** (see the two sections below):
-  always use the highest-tier model available — both make a single judgment
-  affecting the whole batch or all units, and errors here are the most
-  expensive.
+- **test-writer / translator, first attempt**: mid-tier is enough —
+  mechanical work, and the rulebook already converged the places two agents
+  might diverge.
+- **reviewer**: always mid-tier or above — the only quality gate, don't
+  downgrade to save money.
+- **Retries** (attempt ≥ 2): bump to a stronger tier — surviving one retry
+  and still failing usually means this model can't see its own problem, not
+  that it needs another try at the same level.
+- **Integration check / parity check**: always the highest tier available —
+  a single judgment call affecting the whole batch, errors here are the
+  most expensive.
 
 ## Per-unit pipeline
 
 In manifest order (no cross-unit parallelism unless the caller explicitly
 asks for it), for every unit with `status: pending`:
 
-0. **Check this unit's `last_note` first**: if `migration-clarify`'s
-   "identify units with pre-existing manual work" section marked it
-   "manually pre-completed, pending verification, skip conversion step,"
-   this unit **skips step 2 (migration-translator)** — step 3's review target
-   is the **existing file** at `target_path`, not anything newly produced by
-   an agent. No such marker → run the normal three steps.
+0. **Check this unit's manifest row for `manual_work` first** (a unit
+   reaching this point already isn't `trust-as-is` — that's resolved before
+   the loop, see "Unit state" above): `trust-verify` → this unit **skips
+   step 2 (migration-translator)** — step 3's review target is the
+   **existing file** at `target_path`, not anything newly produced by an
+   agent. Blank or `retranslate` → run the normal three steps.
 
-1. **Call `migration-test-writer`**, giving it `unit_id`, `source_path`, the
-   relevant inventory rows, `migration/clarify/RULEBOOK.md` frontmatter's
-   `ground_truth_tier`/`ground_truth_reason` fields (it branches its whole
-   method on this — withholding it isn't optional context, it's a required
-   input), and the domain skill's test-framework conventions, test/build
-   method, and where the template project expects test files to live. Get
-   back a test file path plus behavior-observation notes.
-2. **Call `migration-translator`** (skipped for units flagged in step 0),
-   giving it `source_path`, `target_path`, the rulebook, relevant inventory
-   rows, the domain skill's conversion rules, and the test file path
-   (read-only, remind it not to edit the tests). Get back translation notes.
-3. **Call `migration-test-reviewer`**, giving it `source_path`,
-   `target_path`, the test file path plus behavior-observation notes, the
-   rulebook, and the domain skill's build/test method. Get back a
-   structured review report.
+1. **Call `migration-test-writer`**: `unit_id`, `source_path`, relevant
+   inventory rows, `RULEBOOK.md` frontmatter's `ground_truth_tier`/
+   `ground_truth_reason` (required — it branches its whole method on this),
+   the domain skill's test-framework conventions, test/build method, and
+   where the template expects test files. Returns a test file path +
+   behavior-observation notes.
+2. **Call `migration-translator`** (skipped per step 0): `source_path`,
+   `target_path`, the rulebook, relevant inventory rows, the domain skill's
+   conversion rules, and the test file path (read-only — remind it not to
+   edit tests). Returns translation notes.
+3. **Call `migration-test-reviewer`**: `source_path`, `target_path`, the
+   test file path + behavior-observation notes, the rulebook, the domain
+   skill's build/test method. Returns a structured review report.
 
-**Every time you call any of the above agents, whether it passed or needs a
-rerun, append its usage stats as one line to `migration/convert/cost-log.tsv`**
-(columns: `timestamp, unit_id, agent, attempt, tokens, tool_uses,
-duration_ms, outcome`, e.g.:
-`2026-09-12T18:20:00Z	user_sync	migration-translator	1	48213	9	62000	pass`
-— tab-separated, all eight columns filled, `outcome` matching the unit-state
-vocabulary — `pass`/`fail-conversion`/`fail-test`/`rule-gap` — don't invent
-other terms). This isn't just for successes — reruns cost the same
-resources and need to count toward the budget, or "how much did this pilot
-actually cost" gets underestimated. This log is for human capacity
-planning (air-gapped, fixed-compute environments have no "just buy more
-compute" option — whether to scale a pilot to the full batch relies on this
-number, not a feeling).
+**Every agent call, pass or fail, appends one line to
+`migration/convert/cost-log.tsv`** (`timestamp, unit_id, agent, attempt,
+tokens, tool_uses, duration_ms, outcome` — tab-separated, `outcome` from the
+same status vocabulary, e.g. `2026-09-12T18:20:00Z	user_sync
+migration-translator	1	48213	9	62000	pass`). Reruns cost the same as
+first attempts and must count too, or pilot cost estimates come in low —
+this is what a human uses to decide whether to scale to the full batch in
+an environment with no "just buy more compute" option.
 
 4. Dispatch by review verdict:
-   - **Pass** → status `pass`, move to the next unit.
-   - **Fail, blamed on conversion**:
-     - A unit flagged "skip conversion step" **can't have
-       migration-translator rerun** — no agent ever produced anything to fix,
-       meaning the manually pre-completed version failed review. Status goes
-       straight to `fail-conversion`, `last_note` becomes "manually
-       pre-completed version failed review, returned to the human to decide
-       whether to hand it to the kit for a fresh translation," no retry,
-       leave it for the human to decide in the final report.
-     - Normal units → `attempts.translator += 1`; under the retry cap
-       (default 2) rerun step 2 with the review report attached; at the cap,
-       status `fail-conversion`, skip this unit, log it, move on (don't
-       block the queue).
-   - **Fail, blamed on tests** → `attempts.test_writer += 1`; under the cap,
-     rerun step 1 with the review report attached (after the test rewrite,
-     step 2's conversion doesn't need rerunning, go straight back to step 3
-     for re-review); at the cap, status `fail-test`, skip, log.
-   - **Review reports "rule gap"** → status `rule-gap`, append one line to
-     `migration/convert/deviation-log.tsv` (`timestamp / unit_id / category /
-     detail`), no retry, skip this unit.
+   - **Pass** → `status: pass`, next unit.
+   - **Fail, conversion's fault**:
+     - `manual_work: trust-verify` unit → **no translator rerun** (nothing
+       was ever produced to fix — the manually pre-completed version
+       failed review). `status: fail-conversion`, `last_note`: "manually
+       pre-completed version failed review, returned to the human," no
+       retry.
+     - Normal unit → `attempts.translator += 1`; under the cap (default 2),
+       rerun step 2 with the review report attached; at the cap,
+       `status: fail-conversion`, skip, log, move on.
+   - **Fail, tests' fault** → `attempts.test_writer += 1`; under the cap,
+     rerun step 1 with the review report (step 2 doesn't need rerunning
+     after a test rewrite, go straight to step 3); at the cap,
+     `status: fail-test`, skip, log.
+   - **Rule gap** → `status: rule-gap`, append one line to
+     `migration/convert/deviation-log.tsv` (`timestamp/unit_id/category/
+     detail`), no retry, skip.
 
-## Rule gap recurrence threshold: pause, don't keep force-translating
+## Rule gap recurrence threshold
 
-After every write to `deviation-log.tsv`, check whether the same `category`
-has now hit 3+ occurrences. If so:
-
-- **Stop processing the rest of the manifest's units in that same
-  category** (other categories keep running unaffected).
-- Write this category, with its known cases, as a pending human decision
-  appended to `migration/convert/rulebook-amendments.md` (**never edit `RULEBOOK.md`
-  directly** — the rulebook is read-only inside the loop; amendments are
-  merged by the human between batches).
-- List explicitly in the final report which units paused due to rule gaps.
+After every `deviation-log.tsv` write, check whether the same `category`
+has hit 3+ occurrences. If so: stop processing the rest of that category
+(others keep running unaffected), write it as a pending decision to
+`migration/convert/rulebook-amendments.md` (never edit `RULEBOOK.md`
+directly — read-only inside the loop, amendments merge between batches),
+and list the paused units explicitly in the final report.
 
 ## Integration check, once all units pass
 
-After each call's scope finishes (whether pilot-only or all rows), check
-whether every single row in `migration/clarify/manifest.tsv` (**not just this
-call's scope**) is already `pass` or `excluded` — `excluded` units have no
-target file and never become `pass`, so their non-`pass` state must never
-permanently block the integration check from triggering. Skip this section
-and go straight to "done when" if not everything is `pass`/`excluded` yet.
+After each call, check whether **every row in `manifest.tsv`** (not just
+this call's scope) is `pass` or `excluded` — `excluded` units never produce
+a `target_path` file so they never become `pass`, but shouldn't permanently
+block this from triggering either. Not everything done yet → skip to "Done
+when."
 
-Only once everything is `pass`/`excluded`, and only once (use whether
-`migration/convert/state/_integration.json` exists to know if it's already run;
-redo this section if any unit's state gets reset to `pending` or a failure
-state afterward):
+Once everything's `pass`/`excluded`, run once (check whether
+`migration/convert/state/_integration.json` exists to know if already run;
+redo if any unit resets to `pending`/failure afterward):
 
-Call `migration-test-reviewer` once more, but this time its review scope
-shifts from "one unit" to "the whole `target/` project":
+1. Run the domain skill's build method once across all of `target/`, not
+   per-unit.
+2. Run every test under `target/` once, combined (not each unit's test file
+   separately) — catches "fine alone, breaks together" problems (naming
+   collisions, circular imports).
+3. Domain skill documents an entry point → run it once to confirm the
+   assembled program works. Undocumented → skip, don't invent one.
 
-1. Run the domain skill's build method once across **everything** under
-   `target/`, not unit by unit.
-2. Run **every** test under `target/` once, as one combined test run (not
-   each unit's test file separately) — this catches "fine alone, breaks once
-   combined" problems (e.g. naming collisions between two units, circular
-   imports that only blow up once integrated).
-3. If the domain skill's "template project" section describes how to run the
-   entry point, run it once to confirm the assembled program actually
-   works — not just each file passing its own tests. Skip this item if
-   undescribed (or explicitly says there's no entry point) — don't invent
-   one.
+Log usage to `cost-log.tsv` (`unit_id` = `_integration`). Write
+`_integration.json`: `{"status": "pass"|"fail", "note": "..."}`. **No
+auto-retry on failure** — the problem could span multiple units; list
+concrete symptoms in the final report, let the human pick which unit to
+send back.
 
-Append this call's usage stats to `migration/convert/cost-log.tsv` too (`unit_id`
-column = `_integration`).
+## Parity check (optional — only if `RULEBOOK.md` frontmatter has `parity_check: enabled`)
 
-Write `migration/convert/state/_integration.json`: `{"status": "pass"|"fail", "note":
-"..."}`. **A failure doesn't auto-retry** — the problem could span multiple
-units, unlike a single unit's failure where the responsible agent is clear;
-list concrete symptoms in the final report and let the human decide which
-unit to send back.
+A separate check, run once, after everything's already `pass`/`excluded` —
+not part of the per-unit loop.
 
-This section's scope corresponds to the original code-migration-kit's Step 4
-(compile) + Step 5 (run it), replaced here with a one-time check instead of
-that kit's full error-queue-plus-dedicated-fixer machinery — this batch size
-doesn't need that much weight.
+Run only if `_integration.json` has `status: pass` and
+`parity_check: enabled`; otherwise record `parity_status: skipped`. Already
+run (`parity_status` is `pass`/`fail`) → don't redo unless a human resets
+it.
 
-## Parity check (optional, only if `RULEBOOK.md` frontmatter has `parity_check: enabled`)
-
-The caller's stated task this time is "parity check" — not the
-manifest-scanning loop, a separate check run once against a batch that's
-already all `pass`/`excluded`.
-
-Only run this if the integration check's
-`migration/convert/state/_integration.json` has `status: pass`, and `RULEBOOK.md`
-frontmatter has `parity_check: enabled` — otherwise just record
-`parity_status` as `skipped`. Already done (`_integration.json`'s
-`parity_status` is already `pass` or `fail`) → don't redo it, unless a human
-resets it to unset.
-
-1. **Get the input/output baseline for comparison**: `ground_truth_tier:
-   snapshot` → use existing cases under `migration/clarify/behavior-snapshots/`;
-   `tier: environment` → use the invocation method recorded in `RULEBOOK.md`
-   frontmatter's `ground_truth_reason`, run a few representative inputs
-   against the old system live, and record the outputs as the baseline.
-2. **Validate the comparison mechanism itself — this step can't be
-   skipped**: only possible with `tier: environment` — deliberately mutate a
-   few behaviors in a copy of the old code (flip a conditional, drop an
-   error-handling block, change an output format), confirm the comparison
-   mechanism actually catches the difference; if it doesn't, the mechanism
-   itself is broken — stop and report, don't use it further. `tier:
-   snapshot` has no live old code to mutate, skip this step — the snapshot
-   itself is real data the human provided; its trustworthiness is on the
-   human who supplied it, not something to validate here.
-3. Run the new system (`target/`'s entry point) on the same inputs,
-   mechanically diff the output against the baseline — no documented entry
-   point → skip this section and say plainly in the report "no entry point,
-   parity check not possible," don't invent one.
-4. Merge the result into `migration/convert/state/_integration.json` (don't open a
-   new file), adding two fields: `parity_status: pass|fail|skipped`,
-   `parity_note`.
-5. **A failure doesn't auto-retry** — list the differences and let the human
+1. **Get a baseline**: `ground_truth_tier: snapshot` → use
+   `migration/clarify/behavior-snapshots/`; `tier: environment` → run a few
+   representative inputs against the old system live, using the invocation
+   method in `ground_truth_reason`.
+2. **Validate the comparison mechanism itself** (`tier: environment` only —
+   `snapshot` has no live old code to mutate, skip this step):
+   deliberately break a copy of the old code (flip a conditional, drop
+   error handling, change output format), confirm the comparison actually
+   catches it. Doesn't catch it → the mechanism's broken, stop and report,
+   don't use it further.
+3. Run `target/`'s entry point on the same inputs, diff against the
+   baseline. No entry point → skip, say so plainly, don't invent one.
+4. Merge into `_integration.json` (don't open a new file):
+   `parity_status: pass|fail|skipped`, `parity_note`.
+5. **No auto-retry on failure** — list the differences, let the human
    decide which unit to send back, same handling as an integration-check
    failure.
 
-Append this call's usage stats to `migration/convert/cost-log.tsv` too (`unit_id`
-column = `_parity`).
-
-This section's scope corresponds to the original code-migration-kit's Step 6
-(match behavior), minus its existing-test census (our source batches never
-have existing tests to inherit as a referee) and minus the `06-post-parity`
-marker-burndown machinery. It's optional because for many batches the
-one-time integration check above is already enough, and this section's cost
-(needing to rerun the old system, plus validating the comparison mechanism
-itself) is clearly higher — worth doing is the human's cost/value call when
-deciding `parity_check` in `migration-clarify`.
+Log usage to `cost-log.tsv` (`unit_id` = `_parity`).
 
 ## Done when
 
 Manifest finished (or paused on a rule gap) → stop, report a burndown:
-totals / pass / fail-conversion / fail-test / rule-gap / excluded, plus the
-integration-check result (if it ran) and `parity_status` (`pass`/`fail`/
-`skipped`, if it ran), plus the list of pending rulebook-amendment items.
-List `excluded` as its own line, never folded into failure counts, and never
-omitted — it's not a failure, it's "this unit never needed conversion,"
-and the human needs to see it was explicitly accounted for, not lost.
-Within `pass`, break out units whose `last_note` is exactly "manually
-pre-completed, human confirmed keep, never went through this kit's
-tests/review" as their own line, separate from the normal-pipeline pass
-count — same reasoning as `excluded`, a different confidence level the
-human needs to see, not silently merged into "pass."
-Attach `migration/convert/cost-log.tsv`'s totals too (total tokens, total time,
-subtotals per agent role) — this is what the human uses to decide "given
-what this pilot cost, roughly how much would the full batch cost." Remind
-explicitly that terminal-state units need their status reset to `pending`
-to retry — don't assume the human remembers. **Never decide yourself
-whether to scale the pilot to the full batch, or move to the next stage** —
-that's the caller's call after reading this report.
+totals / `pass` / `fail-conversion` / `fail-test` / `rule-gap` / `excluded`,
+plus the integration-check result (if it ran) and `parity_status` (if it
+ran), plus the list of pending rulebook-amendment items. List `excluded` as
+its own line, never folded into failure counts, never omitted — it's not a
+failure, it's "this unit never needed conversion." Within `pass`, break out
+`manual_work: trust-as-is` units as their own line too — different
+confidence than a real pipeline pass.
+
+Attach `cost-log.tsv`'s totals (total tokens, total time, subtotals per
+agent role) — what the human uses to estimate full-batch cost from pilot
+cost. Remind explicitly that terminal-state units need their status reset
+to `pending` to retry — don't assume the human remembers. **Never decide
+yourself whether to scale the pilot to the full batch, or move to the next
+stage** — that's the caller's call after reading this report.

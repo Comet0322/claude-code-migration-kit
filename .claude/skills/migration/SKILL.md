@@ -75,30 +75,67 @@ assume it's already included.
 
 ## Routing
 
-1. **`migration/analysis/depmap/order.txt` or
+1. **Repo's root `CLAUDE.md` has no "Migration domain skill:" line yet**:
+   decide it now, before calling `migration-analyze` — every later stage
+   needs to know the target library, and this has to be settled before
+   there's any `units.tsv` to lean on. **Self-contained — don't read other
+   sub-skills' SKILL.md files to figure this out.**
+   - Evidence: scan the repo directly (file extensions, import statements,
+     config filenames) — don't wait for `migration-analyze`'s output.
+   - Options: installed `domain-*` skills (workspace + user level;
+     `domain-template` never counts), ranked against each candidate's "app
+     types" and "private package documentation" sections.
+   - **None found**: not automatically a hard stop — the human still
+     decides, but between two real options, via `AskUserQuestion`:
+     1. **Use an installed `*-template` skill directly as `domain_skill`**
+        (e.g. `python-template`) — no source-side documentation at all;
+        `migration-clarify`'s rulebook-drafting and private-package/UI
+        decision points derive everything from the code itself, one
+        human-confirmed decision at a time, instead of reading pre-written
+        rules. Fits when the private packages look generic enough
+        (DB/logging/crypto-shaped) that there's nothing domain-specific
+        worth pre-documenting.
+     2. **Prepare a domain skill first** (copy `domain-template`) — its
+        target-side sections can say "same as skill `<name>`" instead of
+        being rewritten, pointing at a matching installed `*-template`.
+        Fits when the private packages do something genuinely
+        domain-specific, worth documenting once and reusing across the
+        batch.
+     List whatever `*-template` skills are installed either way, concretely.
+     Neither option invents domain knowledge — option 1 still gets every
+     source-side fact confirmed by a human, just in `migration-clarify`
+     instead of a pre-written file.
+   - Ask the human which one via `AskUserQuestion` (recommendation +
+     reasoning up front, never a bare option list), then record: append
+     `Migration domain skill: <name>` to the repo's root `CLAUDE.md`,
+     alongside the pointer line from "Keep `migration/CLAUDE.md` current"
+     above — **never overwrite the rest of an existing root `CLAUDE.md`**.
+   - Ask again for **every repo**, even ones from the same batch — this
+     record is per-repo, never shared or copied in from a prior instance.
+
+2. **`migration/analysis/depmap/order.txt` or
    `migration/analysis/ANALYSIS.md` doesn't exist**: call `migration-analyze`
    (rerunning it is safe/idempotent even if the depmap files already exist —
    it won't redo the script, just resume from wherever it left off). Read-only
-   and rerunnable — proceed to step 2 without waiting for sign-off, unless it
+   and rerunnable — proceed to step 3 without waiting for sign-off, unless it
    flags unusual cycle complexity itself. (Check both files, not
    `migration/analysis/units.tsv` — `units.tsv` gets renamed and moved to
    `migration/clarify/manifest.tsv` once `migration-clarify` fills in
    `target_path`, so it stops existing after that step, and can also briefly
-   not exist yet mid-`migration-analyze` now that its risk assessment is
-   split across parallel `migration-risk-scanner` subagents: the depmap
+   not exist yet mid-`migration-analyze` now that its unit scan is
+   split across parallel `migration-unit-scanner` subagents: the depmap
    script's output can land before those subagent calls finish. `order.txt`
    and `ANALYSIS.md` are the two artifacts nothing downstream ever renames,
    consumes, or produces earlier than the other — checking both is what
    makes "has analysis fully finished" unambiguous.)
 
-2. **Analysis artifacts complete, but `migration/clarify/RULEBOOK.md` (or its
-   frontmatter is missing `domain_skill`/`ground_truth_tier`/
-   `ground_truth_reason`) or `migration/clarify/manifest.tsv` is missing**:
-   call `migration-clarify`. It always stops at the end — **STOP, wait for
-   human confirmation**, don't decide "looks fine" and continue to step 3
-   yourself.
+3. **Analysis artifacts complete, but `migration/clarify/RULEBOOK.md` (or its
+   frontmatter is missing `ground_truth_tier`/`ground_truth_reason`) or
+   `migration/clarify/manifest.tsv` is missing**: call `migration-clarify`.
+   It always stops at the end — **STOP, wait for human confirmation**, don't
+   decide "looks fine" and continue to step 4 yourself.
 
-3. **`migration/clarify/manifest.tsv` has rows marked `pilot=yes`, but
+4. **`migration/clarify/manifest.tsv` has rows marked `pilot=yes`, but
    `migration/convert/pilot-signoff.txt` doesn't exist**: call
    `migration-convert` with `migration/clarify/manifest.tsv`, telling it to
    **process only `pilot=yes` rows**. Present its burndown report, **STOP,
@@ -108,7 +145,7 @@ assume it's already included.
    write this file yourself to skip confirmation**: a clean pilot isn't the
    same as human sign-off.
 
-4. **Pilot signed off, `migration/clarify/manifest.tsv` still has units not
+5. **Pilot signed off, `migration/clarify/manifest.tsv` still has units not
    `pass`/`excluded`**: call `migration-convert` with
    `migration/clarify/manifest.tsv`, telling it to **process all rows (not
    limited to `pilot`)**. Pilot units are already `pass` and get skipped
@@ -116,23 +153,23 @@ assume it's already included.
    replaced by target-side library) never needed conversion and get skipped
    too. Present the final burndown, STOP.
 
-5. **manifest all `pass`/`excluded`, but
+6. **manifest all `pass`/`excluded`, but
    `migration/convert/state/_integration.json` doesn't exist or `status`
    isn't `pass`**: call `migration-convert` again (full manifest) — it
    detects every unit is done and triggers the one-time integration
    build/run check. A failed check doesn't count as "done" — STOP, list the
    symptoms for the human to decide which unit to send back.
 
-6. **Integration check `pass`, `RULEBOOK.md` frontmatter has
+7. **Integration check `pass`, `RULEBOOK.md` frontmatter has
    `parity_check: enabled`, but `_integration.json`'s `parity_status` is
    missing or not `pass`/`skipped`**: call `migration-convert`, telling it
    the task this time is "parity check" (not the manifest-scanning loop).
    `parity_status: fail` → STOP, list symptoms for the human to decide which
-   unit to send back; `pass` → proceed to step 7. No `parity_check:
+   unit to send back; `pass` → proceed to step 8. No `parity_check:
    enabled` → treat `parity_status` as `skipped` without actually calling
-   this step, proceed to step 7.
+   this step, proceed to step 8.
 
-7. **manifest all `pass`/`excluded`, integration check `pass`, and
+8. **manifest all `pass`/`excluded`, integration check `pass`, and
    `parity_status` is `pass` or `skipped`**: report done. If
    `migration/convert/rulebook-amendments.md` still has open items, list
    them for the human — those are logged rule gaps, not auto-applied.
@@ -141,10 +178,10 @@ assume it's already included.
 
 The same batch of legacy apps is usually many separate repos/checkouts, not
 multiple instances crammed into one repo. Rerunning this skill for the next
-instance starts fresh at step 1 with a brand-new `migration/` directory —
-only the domain-skill selection in `migration-clarify` tends to confirm fast
-since the fingerprint match usually guesses right, not a from-scratch
-decision each time.
+instance starts fresh at step 1 (domain-skill selection) with a brand-new
+`migration/` directory — that decision tends to confirm fast since the
+fingerprint match usually guesses right, not a from-scratch decision each
+time.
 
 ## What not to do
 
