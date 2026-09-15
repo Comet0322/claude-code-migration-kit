@@ -283,25 +283,29 @@ auto-proceeds to conversion.
 Does exactly three things: queue, dispatch to the right subagent, record
 results. It never reads code details or judges correctness itself.
 
-**Pre-flight: copy the template, don't rebuild it from its own description.**
-When the domain/template skill's project-shape section names a concrete,
-runnable reference implementation (e.g. `python-template`'s
-`vendor/boogie-sdk-python/examples/etl_demo/`), the scaffold step copies
-that directory wholesale into `target/`, unmodified — it never reads the
-section's prose/ASCII-tree description and hand-writes a look-alike
-structure from memory, since a hand-rebuilt copy would just be an untested
-guess at the same layout. It then **runs the copied template once, exactly
-as shipped** (its own entry point, its own test command) before any unit's
-real translation work starts — a smoke test confirming the DB connection,
-SDK config, and build/runtime wiring actually work in this environment,
-using code that's already known-good. A failure here is reported to the
-human as an environment/infra problem, never routed through the three
-per-unit subagents below — they diagnose translated code, not an unmodified
-reference template. (Some shapes — e.g. `python-template`'s "FastAPI
-long-running service" — currently have no such reference to copy, only a
-prose description; the scaffold is built by hand and flagged as unverified
-in the final report, since there's nothing already-known-good to smoke-test
-against.)
+**Pre-flight: copy the template when starting from scratch, verify infra
+either way.** When the domain/template skill's project-shape section names
+a concrete, runnable reference implementation (e.g. `python-template`'s
+`vendor/boogie-sdk-python/examples/etl_demo/`), and no scaffold exists yet
+for this app, the scaffold step copies that directory wholesale into
+`target/`, unmodified — it never reads the section's prose/ASCII-tree
+description and hand-writes a look-alike structure from memory. **A
+scaffold that already exists is never touched**, whether it's from a
+resumed run of this same pipeline, a human's own pre-existing project this
+migration is layered onto, or `migration-clarify`'s pre-existing-manual-work
+units — this step is purely additive on a from-scratch app, never a
+replacement for what's already there. Separately, whenever a reference
+implementation exists for the shape at all, it gets **run once from its own
+unmodified location, regardless of whether anything was copied into
+`target/`** — an infra smoke test (DB connection, SDK config, build/runtime
+wiring) that stays valid whether this is a fresh copy or a resumed/
+pre-existing project, before any unit's real translation work starts. A
+failure is reported to the human as an environment/infra problem, never
+routed through the three per-unit subagents below — they diagnose translated
+code, not the unmodified reference. (Some shapes — e.g. `python-template`'s
+"FastAPI long-running service" — currently have no reference implementation
+at all, only a prose description; infra stays unverified in that case
+regardless of whether the scaffold was copied, hand-built, or pre-existing.)
 
 **Three independent subagents per unit**, deliberately separated so no single
 role can mark its own homework:

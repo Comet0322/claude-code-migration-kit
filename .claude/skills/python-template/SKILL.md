@@ -207,17 +207,15 @@ expecting one bundled middleware to cover every route automatically.
 
 The reference implementation of this shape is
 [`vendor/boogie-sdk-python/examples/etl_demo/`](vendor/boogie-sdk-python/examples/etl_demo/)
-— **`migration-convert`'s scaffold step copies this directory wholesale,
-unmodified, into the target path, then runs it once as-is (its own entry
-point and test command) before any unit's real translation work starts** —
-it does not read this section's description and hand-write a matching
-structure from scratch. The ASCII tree and file-by-file notes below are for
-understanding what you're copying and why it's laid out this way, not a
-spec to reimplement independently — that copy-then-run-once step is what
-actually confirms the DB/SDK/config wiring works in this environment, which
-a hand-rebuilt look-alike wouldn't verify. Every boogie-sdk ETL example,
-regardless of language, uses this same fixed 4-file shape (Extract/
-Transform/Load plus an orchestrator):
+— a real, runnable directory, not just the description below. Read it as
+"what you'd get if you did this right," not a spec to reimplement from
+memory: `migration-convert`'s own pre-flight logic (see its SKILL.md, not
+duplicated here) decides exactly when to copy it wholesale into a
+from-scratch `target/` versus leave an existing scaffold alone, and either
+way runs it once, unmodified, as an infra smoke test before any unit's real
+translation work starts. Every boogie-sdk ETL example, regardless of
+language, uses this same fixed 4-file shape (Extract/Transform/Load plus an
+orchestrator):
 
 ```
 target/<unit-group-or-app-name>/

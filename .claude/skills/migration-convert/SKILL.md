@@ -50,19 +50,29 @@ pilot never covered.
    confirms/decides, it never creates files under `target/`. Pure
    mechanical execution of already-decided facts (target shape + manifest's
    `target_path` values), no judgment call, so it belongs here.
-   **If the template-project section points at a concrete reference
-   implementation** (a real, runnable directory it names explicitly — e.g.
-   `python-template`'s `vendor/boogie-sdk-python/examples/etl_demo/` — not
-   just a prose directory-tree description), **copy that directory wholesale
-   into the target path(s), unmodified** — don't read its design and
-   hand-write your own matching structure from memory. Copying the working
-   original is what step 6 below actually verifies; a hand-rebuilt
-   look-alike would just be your own untested guess at the same layout.
-   Only fall back to building the structure from the section's prose
-   description when it has no such reference directory to copy (this is a
-   lower-confidence scaffold — say so in the final report). **Idempotent —
-   never overwrite or destroy an existing scaffold**, whether a prior call
-   built it or a human did by hand.
+   **Check first whether a scaffold already exists** — its documented entry
+   point (e.g. `main.py` for the ETL shape, `app/main.py` for FastAPI)
+   already being present is the signal; a bare empty `target_path` directory
+   doesn't count as one. **Already there → skip this step entirely, no
+   matter what put it there**: a prior `migration-convert` call on this same
+   migration, a human's own project this migration is layered onto, or
+   pre-existing manual work (`migration-clarify`'s `manual_work` units —
+   see its own section). **Never copy over it, even when a concrete
+   reference implementation exists to copy from** — this isn't the
+   from-scratch case, and an existing scaffold is the human's, not yours to
+   replace. This is what "idempotent" means here: never overwrite or
+   destroy an existing scaffold, whichever of the above built it.
+   **Only once you've confirmed nothing exists yet**: if the template-project
+   section points at a concrete reference implementation (a real, runnable
+   directory it names explicitly — e.g. `python-template`'s
+   `vendor/boogie-sdk-python/examples/etl_demo/` — not just a prose
+   directory-tree description), **copy that directory wholesale into the
+   target path(s), unmodified** — don't read its design and hand-write your
+   own matching structure from memory; a hand-rebuilt look-alike would just
+   be your own untested guess at the same layout. No such reference
+   directory to copy → build the structure from the section's prose
+   description instead (lower-confidence scaffold — say so in the final
+   report).
 5. Domain skill declares target-side packages needed → confirm read-only
    they're installed — query only, never install. For Python, **check by
    actually importing it** (e.g. `python -c "import boogie_sdk"`), not
@@ -73,28 +83,35 @@ pilot never covered.
    Missing → stop, tell the human what to run.
    `migration-clarify` already checked this once as an early heads-up —
    re-confirm anyway, since real time may have passed.
-6. **If step 4 copied a concrete reference implementation, run it once,
-   completely unmodified, before touching any unit** — its own documented
-   entry point and its own test command (both from the "Test / build
-   method" section), exactly as shipped. This is an infra smoke test, not a
-   per-unit check: it confirms the DB connection, SDK config, and
-   build/runtime wiring all work in *this* environment, using code that's
-   already known-good, before spending any per-unit pipeline cost on top of
-   a broken foundation. Record the result to
+6. **Whenever a concrete reference implementation exists for this shape**
+   (regardless of whether step 4 just copied it, skipped copying because a
+   scaffold already existed, or this is a resumed call) — **run that
+   reference once, from its own unmodified location under `vendor/`** (the
+   "Test / build method" section documents how to invoke the vendored demo
+   directly, separately from `target/`'s own entry point), before touching
+   any unit. This is an infra smoke test, not a per-unit check, and not a
+   check of whatever's actually in `target/` — it confirms the DB
+   connection, SDK config, and build/runtime wiring work in *this*
+   environment, using code that's already known-good, independent of
+   whether `target/` is a fresh copy, a resumed migration, or a human's own
+   pre-existing project. That independence is exactly what makes it safe to
+   run even when step 4 didn't touch `target/` at all. Record the result to
    `migration/convert/state/_scaffold.json` (`{"status": "pass"|"fail",
    "note": "..."}`) so a later call doesn't rerun it once it's passed.
-   Fails → **STOP, report the failure to the human as an environment/infra
+   Fails → **STOP, report it to the human as an environment/infra
    problem** — don't route it through `migration-test-writer`/
    `migration-translator`/`migration-test-reviewer`; those diagnose
-   translated code, not the unmodified reference template, and rerunning
-   them against a broken environment would misattribute an infra failure to
-   a translation bug. Nothing to run (step 4 fell back to a hand-built,
-   prose-only scaffold, since no reference directory existed to copy) →
-   skip this, note in the report that the scaffold itself is unverified.
+   translated code, not the unmodified reference, and rerunning them against
+   a broken environment would misattribute an infra failure to a
+   translation bug. No reference implementation exists for this shape at
+   all (nothing under `vendor/` to run) → skip this, note in the report that
+   infra is unverified either way — the same caveat applies whether or not
+   step 4 had to fall back to a hand-built scaffold.
 
 Any item incomplete → report what's missing, STOP, don't generate or skip
-it. Only once the scaffold exists **and**, where a concrete reference was
-copied, step 6 has actually passed, does the per-unit pipeline below start.
+it. Only once the scaffold exists **and**, where a reference implementation
+exists for this shape, step 6 has actually passed, does the per-unit
+pipeline below start.
 
 Deliberately *not* on this checklist: whether `.claude/settings.json` blocks
 `git commit`/`git push`/installs. It doesn't, on purpose — a repo-wide deny
@@ -293,11 +310,13 @@ Log usage to `cost-log.tsv` (`unit_id` = `_parity`).
 
 Manifest finished (or paused on a rule gap) → stop, report a burndown:
 totals / `pass` / `fail-conversion` / `fail-test` / `rule-gap` / `excluded`,
-plus `_scaffold.json`'s result (whether the scaffold came from a copied
-reference and, if so, whether its unmodified smoke run passed — or that the
-scaffold is unverified prose-only if there was nothing to copy), the
-integration-check result (if it ran) and `parity_status` (if it ran), plus
-the list of pending rulebook-amendment items. List `excluded` as
+plus `_scaffold.json`'s result (whether a reference implementation existed
+for this shape and, if so, whether its unmodified smoke run passed — plus
+whether the scaffold itself came from copying it or was hand-built/already
+existed, since infra being verified doesn't guarantee the scaffold in
+`target/` was too — or that infra is unverified if no reference existed at
+all), the integration-check result (if it ran) and `parity_status` (if it
+ran), plus the list of pending rulebook-amendment items. List `excluded` as
 its own line, never folded into failure counts, never omitted — it's not a
 failure, it's "this unit never needed conversion." Within `pass`, break out
 `manual_work: trust-as-is` units as their own line too — different
