@@ -283,6 +283,26 @@ auto-proceeds to conversion.
 Does exactly three things: queue, dispatch to the right subagent, record
 results. It never reads code details or judges correctness itself.
 
+**Pre-flight: copy the template, don't rebuild it from its own description.**
+When the domain/template skill's project-shape section names a concrete,
+runnable reference implementation (e.g. `python-template`'s
+`vendor/boogie-sdk-python/examples/etl_demo/`), the scaffold step copies
+that directory wholesale into `target/`, unmodified — it never reads the
+section's prose/ASCII-tree description and hand-writes a look-alike
+structure from memory, since a hand-rebuilt copy would just be an untested
+guess at the same layout. It then **runs the copied template once, exactly
+as shipped** (its own entry point, its own test command) before any unit's
+real translation work starts — a smoke test confirming the DB connection,
+SDK config, and build/runtime wiring actually work in this environment,
+using code that's already known-good. A failure here is reported to the
+human as an environment/infra problem, never routed through the three
+per-unit subagents below — they diagnose translated code, not an unmodified
+reference template. (Some shapes — e.g. `python-template`'s "FastAPI
+long-running service" — currently have no such reference to copy, only a
+prose description; the scaffold is built by hand and flagged as unverified
+in the final report, since there's nothing already-known-good to smoke-test
+against.)
+
 **Three independent subagents per unit**, deliberately separated so no single
 role can mark its own homework:
 
@@ -404,6 +424,8 @@ bookkeeping about producing it):
     │   └── decision-log.md      # headless-test mode only
     └── convert/
         ├── state/<unit_id>.json     # {status, attempts:{test_writer,translator,reviewer}, last_note}
+        ├── state/_scaffold.json     # {status, note} - copied-template smoke test, only when a
+        │                            #   concrete reference implementation existed to copy
         ├── state/_integration.json  # {status, note, parity_status?, parity_note?}
         ├── cost-log.tsv              # timestamp, unit_id, agent, attempt, tokens, tool_uses, duration_ms, outcome
         ├── deviation-log.tsv         # rule-gap occurrences, by category

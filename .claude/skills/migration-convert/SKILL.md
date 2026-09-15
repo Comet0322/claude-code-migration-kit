@@ -43,15 +43,25 @@ pilot never covered.
    frontmatter needs `target_shape` pointing at one; missing it, stop and
    tell the human to run `migration-clarify` — don't guess. Single-shape
    domain skills don't need this field.
-4. Build the target scaffold (directory structure, build config) per the
-   template-project section (+ `target_shape` if set — formatted `<skill>:
+4. Build the target scaffold (+ `target_shape` if set — formatted `<skill>:
    <shape name>`; the part after the colon matches that skill's own
    `## Project shape: <name>` heading verbatim) — unlike the other
    checks, you actually build this one: `migration-clarify` only
    confirms/decides, it never creates files under `target/`. Pure
    mechanical execution of already-decided facts (target shape + manifest's
-   `target_path` values), no judgment call, so it belongs here. **Idempotent
-   — never overwrite or destroy an existing scaffold**, whether a prior call
+   `target_path` values), no judgment call, so it belongs here.
+   **If the template-project section points at a concrete reference
+   implementation** (a real, runnable directory it names explicitly — e.g.
+   `python-template`'s `vendor/boogie-sdk-python/examples/etl_demo/` — not
+   just a prose directory-tree description), **copy that directory wholesale
+   into the target path(s), unmodified** — don't read its design and
+   hand-write your own matching structure from memory. Copying the working
+   original is what step 6 below actually verifies; a hand-rebuilt
+   look-alike would just be your own untested guess at the same layout.
+   Only fall back to building the structure from the section's prose
+   description when it has no such reference directory to copy (this is a
+   lower-confidence scaffold — say so in the final report). **Idempotent —
+   never overwrite or destroy an existing scaffold**, whether a prior call
    built it or a human did by hand.
 5. Domain skill declares target-side packages needed → confirm read-only
    they're installed — query only, never install. For Python, **check by
@@ -63,9 +73,28 @@ pilot never covered.
    Missing → stop, tell the human what to run.
    `migration-clarify` already checked this once as an early heads-up —
    re-confirm anyway, since real time may have passed.
+6. **If step 4 copied a concrete reference implementation, run it once,
+   completely unmodified, before touching any unit** — its own documented
+   entry point and its own test command (both from the "Test / build
+   method" section), exactly as shipped. This is an infra smoke test, not a
+   per-unit check: it confirms the DB connection, SDK config, and
+   build/runtime wiring all work in *this* environment, using code that's
+   already known-good, before spending any per-unit pipeline cost on top of
+   a broken foundation. Record the result to
+   `migration/convert/state/_scaffold.json` (`{"status": "pass"|"fail",
+   "note": "..."}`) so a later call doesn't rerun it once it's passed.
+   Fails → **STOP, report the failure to the human as an environment/infra
+   problem** — don't route it through `migration-test-writer`/
+   `migration-translator`/`migration-test-reviewer`; those diagnose
+   translated code, not the unmodified reference template, and rerunning
+   them against a broken environment would misattribute an infra failure to
+   a translation bug. Nothing to run (step 4 fell back to a hand-built,
+   prose-only scaffold, since no reference directory existed to copy) →
+   skip this, note in the report that the scaffold itself is unverified.
 
 Any item incomplete → report what's missing, STOP, don't generate or skip
-it.
+it. Only once the scaffold exists **and**, where a concrete reference was
+copied, step 6 has actually passed, does the per-unit pipeline below start.
 
 Deliberately *not* on this checklist: whether `.claude/settings.json` blocks
 `git commit`/`git push`/installs. It doesn't, on purpose — a repo-wide deny
@@ -264,8 +293,11 @@ Log usage to `cost-log.tsv` (`unit_id` = `_parity`).
 
 Manifest finished (or paused on a rule gap) → stop, report a burndown:
 totals / `pass` / `fail-conversion` / `fail-test` / `rule-gap` / `excluded`,
-plus the integration-check result (if it ran) and `parity_status` (if it
-ran), plus the list of pending rulebook-amendment items. List `excluded` as
+plus `_scaffold.json`'s result (whether the scaffold came from a copied
+reference and, if so, whether its unmodified smoke run passed — or that the
+scaffold is unverified prose-only if there was nothing to copy), the
+integration-check result (if it ran) and `parity_status` (if it ran), plus
+the list of pending rulebook-amendment items. List `excluded` as
 its own line, never folded into failure counts, never omitted — it's not a
 failure, it's "this unit never needed conversion." Within `pass`, break out
 `manual_work: trust-as-is` units as their own line too — different

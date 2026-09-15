@@ -143,6 +143,16 @@ This shape assumes this batch of apps needs to run as a resident HTTP
 service, not a batch job that runs to completion and exits. See "using
 boogie-sdk" above for DB/crypto/logging usage, not repeated here.
 
+**Unlike "background ETL batch" below, this shape has no vendored reference
+implementation to copy** — the tree below is a description only.
+`migration-convert`'s scaffold step has to build it by hand from this
+section, which means there's no unmodified known-good copy to run once and
+confirm the infra actually works before real translation starts; flag the
+scaffold as unverified in that case rather than treating it as equivalent to
+a copied-and-smoke-tested one. If this shape sees real use, adding a real
+runnable reference project under `vendor/` (the same way `etl_demo/` exists
+for the ETL shape) closes this gap.
+
 ```
 target/<unit-group-or-app-name>/
 ├── app/
@@ -197,9 +207,17 @@ expecting one bundled middleware to cover every route automatically.
 
 The reference implementation of this shape is
 [`vendor/boogie-sdk-python/examples/etl_demo/`](vendor/boogie-sdk-python/examples/etl_demo/)
-— treat it as the concrete template, not just the description below. Every
-boogie-sdk ETL example, regardless of language, uses this same fixed
-4-file shape (Extract/Transform/Load plus an orchestrator):
+— **`migration-convert`'s scaffold step copies this directory wholesale,
+unmodified, into the target path, then runs it once as-is (its own entry
+point and test command) before any unit's real translation work starts** —
+it does not read this section's description and hand-write a matching
+structure from scratch. The ASCII tree and file-by-file notes below are for
+understanding what you're copying and why it's laid out this way, not a
+spec to reimplement independently — that copy-then-run-once step is what
+actually confirms the DB/SDK/config wiring works in this environment, which
+a hand-rebuilt look-alike wouldn't verify. Every boogie-sdk ETL example,
+regardless of language, uses this same fixed 4-file shape (Extract/
+Transform/Load plus an orchestrator):
 
 ```
 target/<unit-group-or-app-name>/
