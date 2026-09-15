@@ -9,10 +9,11 @@ description: >
   several skills. Use when writing or reviewing any company-internal Python
   code that talks to the DB, does crypto/masking, needs logging, or builds
   one of these two project shapes — not limited to legacy migration. In the
-  legacy-to-Python migration context, domain-200-delphi-python's and
-  domain-300-vb-python's target-side knowledge (library docs, project-shape
-  templates, test/build method) all point here — don't duplicate it. A
-  different-language binding of the same company boogie-sdk convention as
+  legacy-to-Python migration context, a domain-* skill's target-side
+  knowledge (library docs, project-shape templates, test/build method)
+  points here — don't duplicate it (also the direct target when no domain-*
+  skill is installed and the migration orchestrator picks this template on
+  its own). A different-language binding of the same company boogie-sdk convention as
   `java-template` — same backend MS SQL Server, same log-collection format,
   just the Python-side implementation.
 ---
@@ -35,9 +36,11 @@ target-side knowledge, covering two things:
    follow that shape's own directory structure/entry point/test-build
    method — don't apply both.
 
-In the legacy migration context, both `domain-200-delphi-python` and
-`domain-300-vb-python` point their target-side knowledge (template project,
-library docs, test/build method) here — don't duplicate it.
+In the legacy migration context, a matching `domain-*` skill points its
+target-side knowledge (template project, library docs, test/build method)
+here — don't duplicate it. When no domain-* skill matches a batch, the
+`migration` orchestrator can also point a migration straight at this skill
+as `domain_skill`, no domain-* skill involved at all.
 
 The `vendor/boogie-sdk-python/` subfolder holds a real, installable,
 runnable implementation of `boogie-sdk` — a single `uv` package

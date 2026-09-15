@@ -10,10 +10,11 @@ description: >
   across several skills. Use when writing or reviewing any company-internal
   Java batch code that talks to the DB, does crypto/masking, or needs
   logging — not limited to legacy migration. In the legacy-to-Java migration
-  context, domain-200-vb-java's and domain-200-delphi-java's target-side
-  knowledge (template project, library docs, test/build method) all point
-  here — don't duplicate it. A different-language binding of the same
-  company boogie-sdk convention as `python-template` — same backend MS SQL
+  context, a domain-* skill's target-side knowledge (template project,
+  library docs, test/build method) points here — don't duplicate it (also
+  the direct target when no domain-* skill is installed and the migration
+  orchestrator picks this template on its own). A different-language binding
+  of the same company boogie-sdk convention as `python-template` — same backend MS SQL
   Server, same log-collection format, just the Java-side implementation.
   Java currently has only this one project shape, unlike the Python side
   where `python-template` itself splits into FastAPI-service/ETL-batch
@@ -36,10 +37,11 @@ knowledge, covering two things:
 2. **Project-shape templates** — Java currently has only one: **background
    ETL batch**.
 
-In the legacy migration context, both `domain-200-vb-java` and
-`domain-200-delphi-java` reference this skill as their "template project /
-new-language library docs / test-build method" content — not maintained
-separately.
+In the legacy migration context, a matching `domain-*` skill references this
+skill as its "template project / new-language library docs / test-build
+method" content — not maintained separately. When no domain-* skill matches
+a batch, the `migration` orchestrator can also point a migration straight at
+this skill as `domain_skill`, no domain-* skill involved at all.
 
 The `vendor/boogie-sdk-java/` subfolder holds a real, compilable, runnable
 implementation of `boogie-sdk` — a single-module Maven project (`com.boogie.sdk`,

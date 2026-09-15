@@ -207,7 +207,7 @@ The same target language may not have just one project convention
 company-wide — e.g. target Python might have both a "FastAPI service" and a
 "background ETL batch" shape. In that case **don't** split into multiple
 skills — put them in different subsections of the same shared target-side
-skill instead (e.g. under `python-template`: "using corplib" holds the
+skill instead (e.g. under `python-template`: "using boogie-sdk" holds the
 DB/logging usage genuinely shared across shapes, while "project shape:
 FastAPI long-running service" and "project shape: background ETL batch"
 each get their own section for skeleton/entry point/test-build method).

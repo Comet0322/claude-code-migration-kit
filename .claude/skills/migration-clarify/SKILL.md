@@ -219,9 +219,9 @@ them; `migration-convert` doesn't mind extra columns either way.
 If the domain skill names specific implementation files in its "private
 package documentation" section, match unit `source_path` filenames in
 `manifest.tsv` against them exactly. A match **is** the package's own
-source, not application logic — the target already has a `corplib`
-replacement, translating it line by line is pointless; only calling units
-need their calls rewritten.
+source, not application logic — the target already has a `boogie-sdk`
+(or equivalent) replacement, translating it line by line is pointless; only
+calling units need their calls rewritten.
 
 **Leave `target_path` blank** — that alone is the signal `migration-convert`
 reads to mark `excluded` itself; you never touch

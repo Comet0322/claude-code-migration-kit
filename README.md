@@ -37,10 +37,14 @@ by each department, not by you.
   a test," "we'll need it eventually") — see each skill's "Red Flags" table.
 - **Every artifact has exactly one owner and one purpose.** `units.tsv` is
   renamed and moved to `manifest.tsv` rather than existing as two files kept
-  in sync; `RULEBOOK.md`'s YAML frontmatter is the single decision record
-  (`domain_skill`, `ground_truth_tier`, `target_shape`, `parity_check`)
-  instead of several small decision files. If two files would always need to
-  change together, they're one file.
+  in sync; `RULEBOOK.md`'s YAML frontmatter is the decision record for
+  everything decided *in* `migration-clarify` (`ground_truth_tier`,
+  `ground_truth_reason`, `target_shape`, `parity_check`) instead of several
+  small decision files — `domain_skill` itself is decided a step earlier, by
+  the top-level `migration` orchestrator, and lives in the repo's root
+  `CLAUDE.md`, the one place every stage reads it from, never duplicated
+  into the rulebook. If two files would always need to change together,
+  they're one file.
 - **Domain skills say what, migration says how.** A domain skill only
   describes facts about the source application and what's wanted on the
   target side; how `migration` gets there — its file layout, state format,
@@ -58,7 +62,10 @@ migration              top-level orchestrator — pure routing, no decisions
 
 ```mermaid
 flowchart TD
-    Start([migration called]) --> A{depmap/order.txt<br/>exists?}
+    Start([migration called]) --> Dom{root CLAUDE.md has<br/>"Migration domain skill:"?}
+    Dom -- no --> SelectDom[migration itself<br/>selects domain_skill,<br/>writes root CLAUDE.md]
+    SelectDom --> A
+    Dom -- yes --> A{depmap/order.txt<br/>exists?}
     A -- no --> Analyze[migration-analyze<br/>dependency graph, units.tsv]
     Analyze --> B
     A -- yes --> B{RULEBOOK.md /<br/>manifest.tsv<br/>complete?}
@@ -83,23 +90,37 @@ flowchart TD
 
 Does exactly one thing: look at what exists under `migration/` right now and
 decide which sub-skill to call next. It never analyzes, decides, or
-translates itself. Routing is a 7-step decision table, each step keyed off a
+translates itself. Routing is an 8-step decision table, each step keyed off a
 durable, unambiguous file signal:
 
-1. `migration/analysis/depmap/order.txt` missing → call `migration-analyze`.
+1. Repo's root `CLAUDE.md` has no `Migration domain skill:` line yet →
+   **`migration` decides this itself**, before ever calling
+   `migration-analyze` — every later stage needs the target library settled
+   first. It scans the repo directly (extensions, imports, config
+   filenames), ranks installed `domain-*` skills against each one's declared
+   app types/private-package docs, and confirms with a human via
+   `AskUserQuestion`. No match found isn't a hard stop — the human still
+   picks between using an installed `*-template` skill directly (no
+   source-side docs; every fact gets confirmed live during
+   `migration-clarify` instead) or preparing a domain skill first (copy
+   `domain-template`). Either way the decision is recorded as `Migration
+   domain skill: <name>` appended to the repo's root `CLAUDE.md` — the one
+   place every later stage reads it from, asked again per-repo even within
+   the same batch.
+2. `migration/analysis/depmap/order.txt` missing → call `migration-analyze`.
    (Deliberately checks this file, not `units.tsv`/`manifest.tsv` — those get
    renamed and moved away to `migration/clarify/manifest.tsv` by later steps.
    `depmap/` is the one output nothing downstream ever consumes or renames,
    making it the correct "has analysis run" signal.)
-2. Rulebook or manifest incomplete → call `migration-clarify`. **Always stops
+3. Rulebook or manifest incomplete → call `migration-clarify`. **Always stops
    for human sign-off afterward** — the router never decides "looks fine" on
    its behalf.
-3. Manifest has `pilot=yes` rows but no sign-off marker → run conversion
+4. Manifest has `pilot=yes` rows but no sign-off marker → run conversion
    scoped to the pilot subset only, then stop for human review.
-4. Pilot signed off, units remain → run conversion on the full manifest.
-5. All units terminal → trigger the one-time integration check.
-6. Integration passed and `parity_check: enabled` → trigger the parity check.
-7. Everything passed → report done, surface any open rulebook-amendment items.
+5. Pilot signed off, units remain → run conversion on the full manifest.
+6. All units terminal → trigger the one-time integration check.
+7. Integration passed and `parity_check: enabled` → trigger the parity check.
+8. Everything passed → report done, surface any open rulebook-amendment items.
 
 Every gate that says "STOP" is a deliberate design choice: errors at these
 points are the most expensive in the whole pipeline, and a clean automatic
@@ -137,35 +158,51 @@ agent eyeball the code:
   candidate, and `migration-analyze` folds this into `units.tsv`'s
   `risk_flag`/`risk_reason` (or `ANALYSIS.md`'s own callout for multiple
   entry points) for a human to resolve, the same way `cycle_group` is.
-- **Risk assessment is parallelized**: rather than one context reading every
-  unit's source serially, the unit list is chunked (never splitting a
-  `cycle_group` across chunks) and one `migration-risk-scanner` subagent
-  (read-only, mid-tier model) is dispatched per chunk, in parallel — each
-  reads only its own chunk's source and returns a `risk_flag`/`risk_reason`
-  plus a one-line summary per unit, keeping any single context from having
-  to hold the whole batch's source at once.
+- **Unit scan is parallelized, and does two jobs from one read**: rather than
+  one context reading every unit's source serially, the unit list is chunked
+  (never splitting a `cycle_group` across chunks) and one
+  `migration-unit-scanner` subagent (read-only, mid-tier model) is dispatched
+  per chunk, in parallel — each reads only its own chunk's source, already
+  knows the selected domain skill's target-language library docs (`domain_skill`
+  is settled by `migration` before this step runs), and returns both a
+  `risk_flag`/`risk_reason` plus one-line summary per unit *and* any
+  candidates where the old code hand-rolls something the target library
+  already provides. This subagent used to be two separate scanners (one here,
+  one in `migration-clarify`) that each re-read the same source for a
+  different purpose — merged so one read covers both.
 - Output: `units.tsv` (`unit_id, source_path, cycle_group, order_index,
   risk_flag, risk_reason`) — no `target_path` yet, target-side naming
-  conventions come from the domain skill, which isn't selected until the
-  next step — plus `migration/analysis/ANALYSIS.md`, a human-readable
-  summary (unit/cycle counts, high-risk units surfaced first, frequent
-  `external-refs.tsv` entries, every scanner's one-line summaries) for
-  orienting without parsing four `.tsv`/`.txt` files by hand.
+  conventions come from the domain skill, decided by `migration` but not
+  filled in until `migration-clarify`'s manifest step — plus
+  `migration/analysis/depmap/library-substitution-candidates.tsv`
+  (`unit_id, source_pointer, capability, evidence`, may be empty), the
+  scanners' second job merged together for `migration-clarify`'s
+  rulebook-drafting step to read directly rather than re-scanning, plus
+  `migration/analysis/ANALYSIS.md`, a human-readable summary (unit/cycle
+  counts, high-risk units surfaced first, frequent `external-refs.tsv`
+  entries, every scanner's one-line summaries) for orienting without parsing
+  the `.tsv`/`.txt` files by hand.
 
 ### `migration-clarify` — the heaviest step
 
 The one step designed around sustained human collaboration; visible reasoning
 after every section rather than silent decisions, because mistakes here are
-the most expensive in the pipeline. It runs 9 sections in order:
+the most expensive in the pipeline. Domain-skill selection itself already
+happened one step earlier, in the `migration` orchestrator (see above) —
+`migration-clarify` reads `domain_skill` from the repo's root `CLAUDE.md` and
+never re-decides it. It runs 8 sections in order:
 
-1. **Select domain skill** (once per repo) — scans installed `domain-*`
-   skills, ranks by matching code fingerprints against each candidate's
-   declared signatures, confirms with `AskUserQuestion`.
-2. **Load domain skill content** — resolves both indirection forms a domain
+1. **Load domain skill content** — resolves both indirection forms a domain
    skill can use: `same as skill <name>` (shared target-side knowledge,
    loaded via the Skill tool) vs. a relative path (oversized content split
    into `references/*.md` inside the domain skill's own folder, loaded via
-   Read).
+   Read). If `domain_skill` is itself a `*-template` skill used directly (no
+   domain-* skill matched), every later section already has a fallback for
+   the sections a template skill doesn't have (private-package docs, UI/scope
+   conventions) — treated as "written but empty," never an error.
+2. **Gap inventory** — places where the target language forces an explicit
+   decision the source language left implicit (ownership, nullability,
+   interface contracts).
 3. **Decide how to get ground truth** — a three-tier decision the human makes
    explicitly, never left for a later agent to discover and improvise (an
    agent is never allowed to install or change the environment on its own
@@ -182,24 +219,34 @@ the most expensive in the pipeline. It runs 9 sections in order:
    enable an optional **parity check** — see below.
 4. **Draft the rulebook with the human** — seeded from the domain skill's
    syntax-conversion table; the human only needs to weigh in on
-   codebase-specific ambiguities not already covered. Also cross-checks
-   `external-refs.tsv` against *both* the domain skill's "private package
-   documentation" and its "syntax conversion" table (checking only one
-   produces false positives — a package already named in the docs section
-   would otherwise look like an undocumented gap). Every rule added here
-   gets tagged `[repo-specific]` or `[domain-general]` — the latter is a
-   fact about the domain skill's own private package that any app using it
-   would hit, not something specific to this one codebase, and becomes a
-   named candidate in the final report for the human to fold back into the
-   domain skill's own rule table (never done automatically — this is what
-   keeps a domain skill's seed rules from staying frozen at whenever it was
-   first authored).
-5. **Gap inventory** — places where the target language forces an explicit
-   decision the source language left implicit (ownership, nullability,
-   interface contracts).
-6. **Decide target project shape** (only if the domain skill's template
+   codebase-specific ambiguities not already covered. Evidence comes from
+   two sources grouped by functionality, not literal call text:
+   `external-refs.tsv` (unresolved references) *and*
+   `library-substitution-candidates.tsv` (hand-rolled code that reimplements
+   something the target library already provides, already found by
+   `migration-analyze`'s unit-scanner dispatches — read here, never
+   re-scanned). Every rule added gets tagged `[repo-specific]` or
+   `[domain-general]` — the latter is a fact about the domain skill's own
+   private package that any app using it would hit, not something specific
+   to this one codebase, and becomes a named candidate in the final report
+   for the human to fold back into the domain skill's own rule table (never
+   done automatically — this is what keeps a domain skill's seed rules from
+   staying frozen at whenever it was first authored). The rulebook is
+   read-only from here on — none of the three conversion-stage agents may
+   edit it; amendments come from a human between batches.
+5. **Decide target project shape** (only if the domain skill's template
    section lists more than one shape, e.g. "FastAPI service" vs. "ETL batch")
    — one decision per manifest, never per unit.
+6. **Confirm target-side prerequisites** — verifies target-side package
+   installs read-only (by actually importing the package, not `pip
+   show`/`uv pip show` — those false-negative on a workspace-member or
+   editable install) and stops if they're missing rather than installing
+   them. This step decides/confirms only — it doesn't build anything;
+   actually scaffolding the target project (directory structure, build
+   config files) is `migration-convert`'s own pre-flight job now (pure
+   mechanical execution of a decision already made here, not a judgment
+   call), and it re-confirms the same package check itself before running,
+   since real time can pass between this step and that call.
 7. **Copy source locally, fill in `target_path`, produce the manifest** —
    copies every unit's source into this migration's own `legacy/` directory
    so the whole working tree becomes self-contained (movable, archivable,
@@ -207,27 +254,23 @@ the most expensive in the pipeline. It runs 9 sections in order:
    renames and moves `units.tsv` from `migration/analysis/` to
    `migration/clarify/manifest.tsv` once `target_path` is filled. Three
    detection passes happen here:
-   - **Private-package-itself units** → marked `excluded` (the target side
+   - **Private-package-itself units** → `target_path` left blank, the signal
+     `migration-convert` reads to mark it `excluded` itself (the target side
      already has a replacement library; only calling units need conversion).
    - **UI/presentation-layer units** → always a human scope decision, never
      inferred from code alone; a domain skill's optional "UI/scope
      conventions" note can supply a recommendation, but never substitutes for
-     asking.
+     asking. Dropped units get the same blank-`target_path` treatment as
+     private-package exclusion.
    - **Pre-existing manual work** (`target_path` already has a non-empty
      file, but no `state/<unit_id>.json` exists) → this is the guard against
      silently overwriting hand-migrated work fed into the pipeline
      mid-stream. The human is asked to choose per unit or per batch: trust it
      as-is, verify it without re-converting, or discard and let the kit
-     retranslate (with an explicit backup warning).
-8. **Confirm target-side prerequisites** — verifies target-side package
-   installs read-only and stops if they're missing rather than installing
-   them. This step decides/confirms only — it doesn't build anything;
-   actually scaffolding the target project (directory structure, build
-   config files) is `migration-convert`'s own pre-flight job now (pure
-   mechanical execution of a decision already made here, not a judgment
-   call), and it re-confirms the same package check itself before running,
-   since real time can pass between this step and that call.
-9. **Mark the pilot subset** — 2-3 units (prioritizing `risk_flag: high`)
+     retranslate (with an explicit backup warning) — recorded in a
+     `manual_work` column on `manifest.tsv`
+     (`trust-as-is`/`trust-verify`/`retranslate`).
+8. **Mark the pilot subset** — 2-3 units (prioritizing `risk_flag: high`)
    get `pilot: yes` as a column on `manifest.tsv` itself, not a separate
    file. This is what conversion runs first, to contain the cost if a rule
    turns out to be systematically wrong before it's spent on the whole batch.
@@ -339,15 +382,22 @@ bookkeeping about producing it):
     │                          #   source of truth (see "Session continuity")
     ├── analysis/
     │   ├── depmap/{edges,order,cycles,external-refs}.tsv|txt   (migration-analyze; never renamed away)
+    │   ├── depmap/library-substitution-candidates.tsv   # unit_id, source_pointer,
+    │   │                                                 #   capability, evidence (may be empty)
+    │   ├── units.tsv         # unit_id, source_path, cycle_group, order_index,
+    │   │                     #   risk_flag, risk_reason (renamed/moved to
+    │   │                     #   clarify/manifest.tsv once target_path is filled)
     │   └── ANALYSIS.md       # human-readable analysis summary (see migration-analyze)
     ├── clarify/
-    │   ├── RULEBOOK.md          # frontmatter: domain_skill, ground_truth_tier,
-    │   │                        #   ground_truth_reason, target_shape?, parity_check?
+    │   ├── RULEBOOK.md          # frontmatter: ground_truth_tier, ground_truth_reason,
+    │   │                        #   target_shape?, parity_check? (domain_skill itself
+    │   │                        #   lives in root CLAUDE.md, not here)
     │   │                        # body: translation decisions (tagged
     │   │                        #   [repo-specific]/[domain-general])
     │   ├── inventory.tsv        # explicit-decision points (ownership, nullability, ...)
     │   ├── manifest.tsv         # unit_id, source_path, target_path, cycle_group,
-    │   │                        #   order_index, risk_flag, risk_reason, pilot
+    │   │                        #   order_index, risk_flag, risk_reason, pilot,
+    │   │                        #   manual_work? (only on qualifying rows)
     │   │                        #   (renamed/moved here from analysis/units.tsv)
     │   ├── behavior-snapshots/  # human-supplied I/O examples (ground_truth_tier: snapshot)
     │   ├── .headless-test, .headless-test-domain-skill  # test-harness-only markers
